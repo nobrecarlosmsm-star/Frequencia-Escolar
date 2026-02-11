@@ -1,0 +1,1348 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Sistema de Frequência Escolar - Versão Otimizada">
+    <meta name="theme-color" content="#6366f1">
+    <title>Frequência Escolar - Pro</title>
+    
+    <link rel="manifest" id="manifest-placeholder">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>📚</text></svg>">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .animate-slideup { animation: slideUp 0.5s ease; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .animate-fadein { animation: fadeIn 0.3s ease; }
+        @media print { .no-print { display: none !important; } body { background: white !important; } }
+        .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .login-card { backdrop-filter: blur(10px); background: rgba(255, 255, 255, 0.95); }
+        .percentage-bar { transition: width 0.5s ease; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        
+        // ═══════════════════════════════════════════════════════════════
+        // 👥 SISTEMA DE USUÁRIOS
+        // ═══════════════════════════════════════════════════════════════
+        const DEFAULT_USERS = {
+            admin: { password: 'admin123', role: 'admin', name: 'Administrador Principal' }
+        };
+
+        // ═══════════════════════════════════════════════════════════════
+        // ☁️ CONFIGURAÇÃO DE SINCRONIZAÇÃO (JSONBin.io)
+        // ═══════════════════════════════════════════════════════════════
+        const SYNC_CONFIG = {
+            ENABLED: true,
+            BIN_ID: '',
+            API_KEY: '$2a$10$4CzbqVeUQZL3MyTrP3lV5uu/SXwVIILVRtsT.APE5z8gfI5VSKW4K', // ← COLE SUA API KEY AQUI
+            API_URL: 'https://api.jsonbin.io/v3'
+        };
+
+        // Status do aluno
+        const STUDENT_STATUS = {
+            ATIVO: 'ativo',
+            TRANSFERIDO: 'transferido',
+            FALECIDO: 'falecido'
+        };
+
+        // Ícones
+        const Icon = ({ type, size = 24 }) => {
+            const paths = {
+                user: "M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
+                lock: "M19 11h-1V7a6 6 0 0 0-12 0v4H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2z",
+                calendar: "M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zM5 20V9h14v11H5z",
+                chart: "M3 3v18h18M7 16l4-4 4 4 6-6",
+                logout: "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9",
+                printer: "M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z",
+                users: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75",
+                plus: "M12 5v14M5 12h14",
+                trash: "M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6",
+                cloud: "M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z",
+                refresh: "M23 4v6h-6M1 20v-6h6M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15",
+                settings: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z",
+                download: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3",
+                upload: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12",
+                percent: "M19 5L5 19M9 5a2 2 0 1 1-4 0 2 2 0 0 1 4 0zM19 19a2 2 0 1 1-4 0 2 2 0 0 1 4 0z",
+                x: "M18 6L6 18M6 6l12 12"
+            };
+            return (
+                <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d={paths[type]} />
+                </svg>
+            );
+        };
+
+        // ═══════════════════════════════════════════════════════════════
+        // 🔄 SINCRONIZAÇÃO
+        // ═══════════════════════════════════════════════════════════════
+        class SyncManager {
+            static async save(data) {
+                if (!SYNC_CONFIG.ENABLED || !SYNC_CONFIG.API_KEY.includes('$2a$')) return false;
+                
+                try {
+                    const binId = localStorage.getItem('syncBinId') || SYNC_CONFIG.BIN_ID;
+                    const url = binId 
+                        ? `${SYNC_CONFIG.API_URL}/b/${binId}`
+                        : `${SYNC_CONFIG.API_URL}/b`;
+                    
+                    const method = binId ? 'PUT' : 'POST';
+                    
+                    const response = await fetch(url, {
+                        method: method,
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Master-Key': SYNC_CONFIG.API_KEY
+                        },
+                        body: JSON.stringify({
+                            ...data,
+                            lastSync: new Date().toISOString()
+                        })
+                    });
+                    
+                    if (!response.ok) throw new Error('Erro na sincronização');
+                    
+                    const result = await response.json();
+                    const newBinId = result.metadata?.id || binId;
+                    
+                    if (newBinId) {
+                        localStorage.setItem('syncBinId', newBinId);
+                    }
+                    
+                    return true;
+                } catch (error) {
+                    console.error('Erro ao salvar:', error);
+                    return false;
+                }
+            }
+
+            static async load() {
+                if (!SYNC_CONFIG.ENABLED || !SYNC_CONFIG.API_KEY.includes('$2a$')) return null;
+                
+                try {
+                    const binId = localStorage.getItem('syncBinId') || SYNC_CONFIG.BIN_ID;
+                    if (!binId) return null;
+                    
+                    const response = await fetch(`${SYNC_CONFIG.API_URL}/b/${binId}/latest`, {
+                        headers: {
+                            'X-Master-Key': SYNC_CONFIG.API_KEY
+                        }
+                    });
+                    
+                    if (!response.ok) throw new Error('Erro ao carregar');
+                    
+                    const result = await response.json();
+                    return result.record;
+                } catch (error) {
+                    console.error('Erro ao carregar:', error);
+                    return null;
+                }
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // 🔐 TELA DE LOGIN
+        // ═══════════════════════════════════════════════════════════════
+        function LoginScreen({ onLogin, users, setUsers }) {
+            const [username, setUsername] = useState('');
+            const [password, setPassword] = useState('');
+            const [showPasswordRecovery, setShowPasswordRecovery] = useState(false);
+            const [recoveryUsername, setRecoveryUsername] = useState('');
+            const [newPassword, setNewPassword] = useState('');
+            const [confirmPassword, setConfirmPassword] = useState('');
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                const user = users[username];
+                
+                if (!user || user.password !== password) {
+                    alert('❌ Usuário ou senha incorretos!');
+                    return;
+                }
+                
+                onLogin({
+                    username,
+                    name: user.name,
+                    role: user.role,
+                    canEdit: user.role === 'admin' || user.role === 'alimentador',
+                    canManageStudents: user.role === 'admin',
+                    canManageUsers: user.role === 'admin'
+                });
+            };
+
+            const handlePasswordRecovery = () => {
+                if (!recoveryUsername) {
+                    alert('⚠️ Digite seu nome de usuário!');
+                    return;
+                }
+
+                if (!users[recoveryUsername]) {
+                    alert('❌ Usuário não encontrado!');
+                    return;
+                }
+
+                if (!newPassword || !confirmPassword) {
+                    alert('⚠️ Preencha a nova senha e a confirmação!');
+                    return;
+                }
+
+                if (newPassword !== confirmPassword) {
+                    alert('❌ As senhas não coincidem!');
+                    return;
+                }
+
+                if (newPassword.length < 4) {
+                    alert('⚠️ A senha deve ter pelo menos 4 caracteres!');
+                    return;
+                }
+
+                // Atualizar senha
+                const updatedUsers = {
+                    ...users,
+                    [recoveryUsername]: {
+                        ...users[recoveryUsername],
+                        password: newPassword
+                    }
+                };
+
+                setUsers(updatedUsers);
+                
+                alert('✅ Senha alterada com sucesso!\nAgora você pode fazer login com a nova senha.');
+                
+                // Resetar formulário e voltar para login
+                setShowPasswordRecovery(false);
+                setRecoveryUsername('');
+                setNewPassword('');
+                setConfirmPassword('');
+                setUsername(recoveryUsername);
+            };
+
+            return (
+                <div className="min-h-screen gradient-bg flex items-center justify-center p-4">
+                    <div className="login-card rounded-2xl shadow-2xl p-8 w-full max-w-md animate-slideup">
+                        <div className="text-center mb-8">
+                            <div className="text-6xl mb-4">📚</div>
+                            <h1 className="text-3xl font-bold text-gray-800">Frequência Escolar</h1>
+                            <p className="text-gray-600 mt-2">Sistema Profissional</p>
+                        </div>
+
+                        {!showPasswordRecovery ? (
+                            // TELA DE LOGIN
+                            <>
+                                <form onSubmit={handleSubmit} className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-2">Usuário</label>
+                                        <div className="relative">
+                                            <div className="absolute left-3 top-3 text-gray-400">
+                                                <Icon type="user" size={20} />
+                                            </div>
+                                            <input
+                                                type="text"
+                                                value={username}
+                                                onChange={(e) => setUsername(e.target.value)}
+                                                className="w-full pl-11 pr-4 py-3 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:outline-none"
+                                                placeholder="Digite seu usuário"
+                                                required
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-2">Senha</label>
+                                        <div className="relative">
+                                            <div className="absolute left-3 top-3 text-gray-400">
+                                                <Icon type="lock" size={20} />
+                                            </div>
+                                            <input
+                                                type="password"
+                                                value={password}
+                                                onChange={(e) => setPassword(e.target.value)}
+                                                className="w-full pl-11 pr-4 py-3 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:outline-none"
+                                                placeholder="Digite sua senha"
+                                                required
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <button
+                                        type="submit"
+                                        className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-all shadow-lg"
+                                    >
+                                        Entrar
+                                    </button>
+                                </form>
+
+                                <div className="mt-4 text-center">
+                                    <button
+                                        onClick={() => setShowPasswordRecovery(true)}
+                                        className="text-indigo-600 hover:text-indigo-800 text-sm font-semibold"
+                                    >
+                                        🔑 Esqueci minha senha
+                                    </button>
+                                </div>
+
+                                <div className="mt-6 p-4 bg-gray-100 rounded-lg text-sm">
+                                    <p className="font-semibold mb-2">👤 Usuário padrão:</p>
+                                    <div className="flex justify-between"><span>🔑 Admin:</span><span className="font-mono">admin / admin123</span></div>
+                                </div>
+                            </>
+                        ) : (
+                            // TELA DE RECUPERAÇÃO DE SENHA
+                            <div className="space-y-4">
+                                <div className="bg-blue-50 p-4 rounded-lg mb-4">
+                                    <p className="text-sm text-blue-800">
+                                        <strong>🔐 Recuperação de Senha</strong><br/>
+                                        Digite seu nome de usuário e escolha uma nova senha.
+                                    </p>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Nome de Usuário</label>
+                                    <input
+                                        type="text"
+                                        value={recoveryUsername}
+                                        onChange={(e) => setRecoveryUsername(e.target.value)}
+                                        className="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:outline-none"
+                                        placeholder="Digite seu usuário"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Nova Senha</label>
+                                    <input
+                                        type="password"
+                                        value={newPassword}
+                                        onChange={(e) => setNewPassword(e.target.value)}
+                                        className="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:outline-none"
+                                        placeholder="Digite a nova senha"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Confirmar Nova Senha</label>
+                                    <input
+                                        type="password"
+                                        value={confirmPassword}
+                                        onChange={(e) => setConfirmPassword(e.target.value)}
+                                        className="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:outline-none"
+                                        placeholder="Digite a senha novamente"
+                                    />
+                                </div>
+
+                                <div className="flex gap-3">
+                                    <button
+                                        onClick={handlePasswordRecovery}
+                                        className="flex-1 bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 transition-all"
+                                    >
+                                        ✅ Alterar Senha
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setShowPasswordRecovery(false);
+                                            setRecoveryUsername('');
+                                            setNewPassword('');
+                                            setConfirmPassword('');
+                                        }}
+                                        className="flex-1 bg-gray-600 text-white py-3 rounded-lg font-semibold hover:bg-gray-700 transition-all"
+                                    >
+                                        ❌ Cancelar
+                                    </button>
+                                </div>
+
+                                <div className="mt-4 p-3 bg-yellow-50 border-2 border-yellow-200 rounded-lg text-sm">
+                                    <p className="text-yellow-800">
+                                        ⚠️ <strong>Importante:</strong> Anote sua nova senha em um lugar seguro!
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // 👥 GERENCIAR USUÁRIOS (APENAS ADMIN)
+        // ═══════════════════════════════════════════════════════════════
+        function ManageUsers({ users, setUsers, onClose }) {
+            const [newUsername, setNewUsername] = useState('');
+            const [newPassword, setNewPassword] = useState('');
+            const [newName, setNewName] = useState('');
+            const [newRole, setNewRole] = useState('alimentador');
+
+            const addUser = () => {
+                if (!newUsername || !newPassword || !newName) {
+                    return alert('⚠️ Preencha todos os campos!');
+                }
+                
+                if (users[newUsername]) {
+                    return alert('⚠️ Usuário já existe!');
+                }
+
+                setUsers({
+                    ...users,
+                    [newUsername]: {
+                        password: newPassword,
+                        name: newName,
+                        role: newRole
+                    }
+                });
+
+                setNewUsername('');
+                setNewPassword('');
+                setNewName('');
+                alert('✅ Usuário adicionado com sucesso!');
+            };
+
+            const deleteUser = (username) => {
+                if (username === 'admin') {
+                    return alert('⚠️ Não é possível excluir o admin!');
+                }
+                
+                if (!confirm(`Excluir usuário ${username}?`)) return;
+                
+                const newUsers = { ...users };
+                delete newUsers[username];
+                setUsers(newUsers);
+            };
+
+            return (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-2xl font-bold">👥 Gerenciar Usuários</h2>
+                            <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+                                <Icon type="x" size={24} />
+                            </button>
+                        </div>
+
+                        {/* Adicionar novo usuário */}
+                        <div className="bg-blue-50 p-4 rounded-lg mb-6">
+                            <h3 className="font-bold mb-3">➕ Adicionar Novo Usuário</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                                <input
+                                    type="text"
+                                    placeholder="Nome de usuário (login)"
+                                    value={newUsername}
+                                    onChange={(e) => setNewUsername(e.target.value)}
+                                    className="p-3 border-2 rounded-lg"
+                                />
+                                <input
+                                    type="text"
+                                    placeholder="Nome completo"
+                                    value={newName}
+                                    onChange={(e) => setNewName(e.target.value)}
+                                    className="p-3 border-2 rounded-lg"
+                                />
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                                <input
+                                    type="password"
+                                    placeholder="Senha"
+                                    value={newPassword}
+                                    onChange={(e) => setNewPassword(e.target.value)}
+                                    className="p-3 border-2 rounded-lg"
+                                />
+                                <select
+                                    value={newRole}
+                                    onChange={(e) => setNewRole(e.target.value)}
+                                    className="p-3 border-2 rounded-lg"
+                                >
+                                    <option value="alimentador">Alimentador (Registra presenças)</option>
+                                    <option value="observador">Observador (Apenas visualiza)</option>
+                                </select>
+                            </div>
+                            <button
+                                onClick={addUser}
+                                className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 font-semibold"
+                            >
+                                Adicionar Usuário
+                            </button>
+                        </div>
+
+                        {/* Lista de usuários */}
+                        <div className="space-y-3">
+                            <h3 className="font-bold text-lg">Usuários Cadastrados:</h3>
+                            {Object.entries(users).map(([username, userData]) => (
+                                <div key={username} className="border-2 rounded-lg p-4 flex justify-between items-center">
+                                    <div>
+                                        <p className="font-bold">{userData.name}</p>
+                                        <p className="text-sm text-gray-600">@{username}</p>
+                                        <p className="text-xs">
+                                            {userData.role === 'admin' && '👑 Administrador'}
+                                            {userData.role === 'alimentador' && '✏️ Alimentador'}
+                                            {userData.role === 'observador' && '👁️ Observador'}
+                                        </p>
+                                    </div>
+                                    {username !== 'admin' && (
+                                        <button
+                                            onClick={() => deleteUser(username)}
+                                            className="text-red-600 hover:text-red-800"
+                                        >
+                                            <Icon type="trash" size={20} />
+                                        </button>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="mt-6">
+                            <button
+                                onClick={onClose}
+                                className="w-full bg-gray-600 text-white py-3 rounded-lg hover:bg-gray-700 font-semibold"
+                            >
+                                Fechar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // 📚 GERENCIAR TURMAS (APENAS ADMIN)
+        // ═══════════════════════════════════════════════════════════════
+        function ManageClasses({ classes, setClasses, onClose }) {
+            const [newClassName, setNewClassName] = useState('');
+            const [studentNames, setStudentNames] = useState('');
+
+            const addClass = () => {
+                if (!newClassName || !studentNames) {
+                    return alert('⚠️ Preencha o nome da turma e a lista de alunos!');
+                }
+                
+                const students = studentNames
+                    .split('\n')
+                    .filter(s => s.trim())
+                    .map((name, idx) => ({
+                        id: Date.now() + idx,
+                        name: name.trim(),
+                        status: STUDENT_STATUS.ATIVO,
+                        observations: {}
+                    }));
+                
+                setClasses([...classes, { 
+                    id: Date.now(), 
+                    name: newClassName, 
+                    students 
+                }]);
+                
+                setNewClassName('');
+                setStudentNames('');
+                alert('✅ Turma adicionada com sucesso!');
+            };
+
+            const deleteClass = (classId) => {
+                if (!confirm('⚠️ Deletar esta turma e todos os dados?')) return;
+                setClasses(classes.filter(c => c.id !== classId));
+            };
+
+            const exportClass = (cls) => {
+                const data = JSON.stringify(cls, null, 2);
+                const blob = new Blob([data], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `turma_${cls.name.replace(/\s/g, '_')}.json`;
+                a.click();
+                alert('✅ Turma exportada!');
+            };
+
+            const importClass = () => {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = '.json';
+                input.onchange = (e) => {
+                    const file = e.target.files[0];
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        try {
+                            const importedClass = JSON.parse(event.target.result);
+                            importedClass.id = Date.now(); // Novo ID
+                            setClasses([...classes, importedClass]);
+                            alert('✅ Turma importada!');
+                        } catch (error) {
+                            alert('❌ Erro ao importar turma!');
+                        }
+                    };
+                    reader.readAsText(file);
+                };
+                input.click();
+            };
+
+            return (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-2xl font-bold">📚 Gerenciar Turmas</h2>
+                            <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+                                <Icon type="x" size={24} />
+                            </button>
+                        </div>
+
+                        {/* Adicionar nova turma */}
+                        <div className="bg-blue-50 p-4 rounded-lg mb-6">
+                            <h3 className="font-bold mb-3">➕ Adicionar Nova Turma</h3>
+                            <input
+                                type="text"
+                                placeholder="Nome da Turma (ex: 5º Ano A)"
+                                value={newClassName}
+                                onChange={(e) => setNewClassName(e.target.value)}
+                                className="w-full p-3 border-2 rounded-lg mb-3"
+                            />
+                            <textarea
+                                placeholder="Cole os nomes dos alunos (um por linha):&#10;João Silva&#10;Maria Santos&#10;Pedro Oliveira"
+                                value={studentNames}
+                                onChange={(e) => setStudentNames(e.target.value)}
+                                className="w-full p-3 border-2 rounded-lg h-32 mb-3"
+                            />
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={addClass}
+                                    className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 font-semibold"
+                                >
+                                    Adicionar Turma
+                                </button>
+                                <button
+                                    onClick={importClass}
+                                    className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 font-semibold flex items-center gap-2"
+                                >
+                                    <Icon type="upload" size={20} />
+                                    Importar Turma
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Lista de turmas */}
+                        <div className="space-y-4">
+                            <h3 className="font-bold text-lg">Turmas Cadastradas:</h3>
+                            {classes.length === 0 && (
+                                <p className="text-gray-500">Nenhuma turma cadastrada ainda</p>
+                            )}
+                            {classes.map(cls => (
+                                <div key={cls.id} className="border-2 rounded-lg p-4">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <h4 className="font-bold text-lg">{cls.name}</h4>
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => exportClass(cls)}
+                                                className="text-blue-600 hover:text-blue-800"
+                                                title="Exportar turma"
+                                            >
+                                                <Icon type="download" size={20} />
+                                            </button>
+                                            <button
+                                                onClick={() => deleteClass(cls.id)}
+                                                className="text-red-600 hover:text-red-800"
+                                                title="Excluir turma"
+                                            >
+                                                <Icon type="trash" size={20} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <p className="text-sm text-gray-600">{cls.students.length} alunos</p>
+                                    <div className="mt-2 text-sm">
+                                        {cls.students.slice(0, 5).map(s => s.name).join(', ')}
+                                        {cls.students.length > 5 && ` +${cls.students.length - 5} mais`}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="mt-6">
+                            <button
+                                onClick={onClose}
+                                className="w-full bg-gray-600 text-white py-3 rounded-lg hover:bg-gray-700 font-semibold"
+                            >
+                                Fechar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // 👨‍🎓 GERENCIAR ALUNOS (APENAS ADMIN)
+        // ═══════════════════════════════════════════════════════════════
+        function ManageStudents({ selectedClass, classes, setClasses, onClose }) {
+            const [newStudentName, setNewStudentName] = useState('');
+
+            const addStudent = () => {
+                if (!newStudentName.trim()) {
+                    return alert('⚠️ Digite o nome do aluno!');
+                }
+
+                setClasses(prev => prev.map(cls => {
+                    if (cls.id === selectedClass.id) {
+                        return {
+                            ...cls,
+                            students: [...cls.students, {
+                                id: Date.now(),
+                                name: newStudentName.trim(),
+                                status: STUDENT_STATUS.ATIVO,
+                                observations: {}
+                            }]
+                        };
+                    }
+                    return cls;
+                }));
+
+                setNewStudentName('');
+                alert('✅ Aluno adicionado!');
+            };
+
+            const deleteStudent = (studentId) => {
+                if (!confirm('⚠️ Excluir este aluno e todos os dados?')) return;
+
+                setClasses(prev => prev.map(cls => {
+                    if (cls.id === selectedClass.id) {
+                        return {
+                            ...cls,
+                            students: cls.students.filter(s => s.id !== studentId)
+                        };
+                    }
+                    return cls;
+                }));
+            };
+
+            const changeStudentStatus = (studentId, newStatus) => {
+                setClasses(prev => prev.map(cls => {
+                    if (cls.id === selectedClass.id) {
+                        return {
+                            ...cls,
+                            students: cls.students.map(s => 
+                                s.id === studentId ? { ...s, status: newStatus } : s
+                            )
+                        };
+                    }
+                    return cls;
+                }));
+            };
+
+            const currentClass = classes.find(c => c.id === selectedClass.id);
+
+            return (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-2xl font-bold">👨‍🎓 Gerenciar Alunos - {selectedClass.name}</h2>
+                            <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+                                <Icon type="x" size={24} />
+                            </button>
+                        </div>
+
+                        {/* Adicionar aluno */}
+                        <div className="bg-blue-50 p-4 rounded-lg mb-6">
+                            <h3 className="font-bold mb-3">➕ Adicionar Aluno</h3>
+                            <div className="flex gap-3">
+                                <input
+                                    type="text"
+                                    placeholder="Nome completo do aluno"
+                                    value={newStudentName}
+                                    onChange={(e) => setNewStudentName(e.target.value)}
+                                    className="flex-1 p-3 border-2 rounded-lg"
+                                    onKeyPress={(e) => e.key === 'Enter' && addStudent()}
+                                />
+                                <button
+                                    onClick={addStudent}
+                                    className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 font-semibold"
+                                >
+                                    Adicionar
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Lista de alunos */}
+                        <div className="space-y-3">
+                            <h3 className="font-bold text-lg">Alunos Cadastrados:</h3>
+                            {currentClass?.students.map(student => (
+                                <div key={student.id} className="border-2 rounded-lg p-4">
+                                    <div className="flex justify-between items-start mb-3">
+                                        <div className="flex-1">
+                                            <p className="font-bold">{student.name}</p>
+                                            <p className="text-sm text-gray-600">ID: {student.id}</p>
+                                        </div>
+                                        <button
+                                            onClick={() => deleteStudent(student.id)}
+                                            className="text-red-600 hover:text-red-800"
+                                            title="Excluir aluno"
+                                        >
+                                            <Icon type="trash" size={20} />
+                                        </button>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-semibold mb-2">Status do Aluno:</label>
+                                        <select
+                                            value={student.status}
+                                            onChange={(e) => changeStudentStatus(student.id, e.target.value)}
+                                            className="w-full p-2 border-2 rounded-lg"
+                                        >
+                                            <option value={STUDENT_STATUS.ATIVO}>✅ Ativo</option>
+                                            <option value={STUDENT_STATUS.TRANSFERIDO}>🔄 Transferido</option>
+                                            <option value={STUDENT_STATUS.FALECIDO}>🕊️ Falecido</option>
+                                        </select>
+                                        {student.status !== STUDENT_STATUS.ATIVO && (
+                                            <p className="text-xs text-orange-600 mt-1">
+                                                ⚠️ Presenças bloqueadas para este aluno
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="mt-6">
+                            <button
+                                onClick={onClose}
+                                className="w-full bg-gray-600 text-white py-3 rounded-lg hover:bg-gray-700 font-semibold"
+                            >
+                                Fechar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // 📊 RELATÓRIOS COM PORCENTAGENS
+        // ═══════════════════════════════════════════════════════════════
+        function Reports({ selectedClass, classes }) {
+            const currentClass = classes.find(c => c.id === selectedClass?.id);
+            if (!currentClass) return <div className="p-6">Selecione uma turma</div>;
+
+            // Calcular estatísticas
+            const calculateStats = () => {
+                const stats = currentClass.students.map(student => {
+                    const observations = Object.entries(student.observations);
+                    const totalDays = observations.length;
+                    const presentDays = observations.filter(([_, data]) => data.presente).length;
+                    const percentage = totalDays > 0 ? ((presentDays / totalDays) * 100).toFixed(1) : 0;
+
+                    return {
+                        name: student.name,
+                        status: student.status,
+                        totalDays,
+                        presentDays,
+                        absentDays: totalDays - presentDays,
+                        percentage: parseFloat(percentage)
+                    };
+                });
+
+                return stats.sort((a, b) => b.percentage - a.percentage);
+            };
+
+            const stats = calculateStats();
+            const avgPercentage = stats.length > 0 
+                ? (stats.reduce((sum, s) => sum + s.percentage, 0) / stats.length).toFixed(1)
+                : 0;
+
+            const printReport = () => {
+                window.print();
+            };
+
+            return (
+                <div className="p-6">
+                    <div className="flex justify-between items-center mb-6 no-print">
+                        <h2 className="text-2xl font-bold">📊 Relatório - {currentClass.name}</h2>
+                        <button
+                            onClick={printReport}
+                            className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 flex items-center gap-2"
+                        >
+                            <Icon type="printer" size={20} />
+                            Imprimir
+                        </button>
+                    </div>
+
+                    {/* Resumo */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                        <div className="bg-blue-50 p-4 rounded-lg">
+                            <p className="text-sm text-gray-600">Total de Alunos</p>
+                            <p className="text-3xl font-bold">{currentClass.students.length}</p>
+                        </div>
+                        <div className="bg-green-50 p-4 rounded-lg">
+                            <p className="text-sm text-gray-600">Frequência Média</p>
+                            <p className="text-3xl font-bold">{avgPercentage}%</p>
+                        </div>
+                        <div className="bg-purple-50 p-4 rounded-lg">
+                            <p className="text-sm text-gray-600">Dias Registrados</p>
+                            <p className="text-3xl font-bold">
+                                {stats.length > 0 ? Math.max(...stats.map(s => s.totalDays)) : 0}
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Tabela de alunos */}
+                    <div className="bg-white border-2 rounded-lg overflow-hidden">
+                        <div className="overflow-x-auto">
+                            <table className="w-full">
+                                <thead className="bg-gray-100">
+                                    <tr>
+                                        <th className="px-4 py-3 text-left font-semibold">Aluno</th>
+                                        <th className="px-4 py-3 text-center font-semibold">Status</th>
+                                        <th className="px-4 py-3 text-center font-semibold">Dias</th>
+                                        <th className="px-4 py-3 text-center font-semibold">Presenças</th>
+                                        <th className="px-4 py-3 text-center font-semibold">Faltas</th>
+                                        <th className="px-4 py-3 text-center font-semibold">Frequência</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {stats.map((stat, index) => (
+                                        <tr key={index} className="border-t hover:bg-gray-50">
+                                            <td className="px-4 py-3 font-medium">{stat.name}</td>
+                                            <td className="px-4 py-3 text-center">
+                                                {stat.status === STUDENT_STATUS.ATIVO && '✅'}
+                                                {stat.status === STUDENT_STATUS.TRANSFERIDO && '🔄'}
+                                                {stat.status === STUDENT_STATUS.FALECIDO && '🕊️'}
+                                            </td>
+                                            <td className="px-4 py-3 text-center">{stat.totalDays}</td>
+                                            <td className="px-4 py-3 text-center text-green-600 font-semibold">
+                                                {stat.presentDays}
+                                            </td>
+                                            <td className="px-4 py-3 text-center text-red-600 font-semibold">
+                                                {stat.absentDays}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="flex-1 bg-gray-200 rounded-full h-6 overflow-hidden">
+                                                        <div 
+                                                            className="percentage-bar h-full bg-gradient-to-r from-green-400 to-green-600"
+                                                            style={{ width: `${stat.percentage}%` }}
+                                                        />
+                                                    </div>
+                                                    <span className="font-bold text-sm w-12 text-right">
+                                                        {stat.percentage}%
+                                                    </span>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // ✏️ REGISTRO DE PRESENÇA
+        // ═══════════════════════════════════════════════════════════════
+        function AttendanceRegister({ selectedClass, selectedDate, classes, setClasses, canEdit }) {
+            const currentClass = classes.find(c => c.id === selectedClass?.id);
+            if (!currentClass) return <div className="p-6">Selecione uma turma</div>;
+
+            const togglePresence = (studentId) => {
+                if (!canEdit) return alert('⚠️ Sem permissão para editar');
+                
+                const student = currentClass.students.find(s => s.id === studentId);
+                if (student.status !== STUDENT_STATUS.ATIVO) {
+                    return alert(`⚠️ Não é possível registrar presença para aluno ${
+                        student.status === STUDENT_STATUS.TRANSFERIDO ? 'transferido' : 'falecido'
+                    }`);
+                }
+
+                setClasses(prev => prev.map(cls => {
+                    if (cls.id === selectedClass.id) {
+                        return {
+                            ...cls,
+                            students: cls.students.map(student => {
+                                if (student.id === studentId) {
+                                    const observations = { ...student.observations };
+                                    if (!observations[selectedDate]) {
+                                        observations[selectedDate] = { presente: true, observacao: '' };
+                                    } else {
+                                        observations[selectedDate].presente = !observations[selectedDate].presente;
+                                    }
+                                    return { ...student, observations };
+                                }
+                                return student;
+                            })
+                        };
+                    }
+                    return cls;
+                }));
+            };
+
+            const addObservation = (studentId, text) => {
+                if (!canEdit) return;
+
+                setClasses(prev => prev.map(cls => {
+                    if (cls.id === selectedClass.id) {
+                        return {
+                            ...cls,
+                            students: cls.students.map(student => {
+                                if (student.id === studentId) {
+                                    const observations = { ...student.observations };
+                                    if (!observations[selectedDate]) {
+                                        observations[selectedDate] = { presente: false, observacao: text };
+                                    } else {
+                                        observations[selectedDate].observacao = text;
+                                    }
+                                    return { ...student, observations };
+                                }
+                                return student;
+                            })
+                        };
+                    }
+                    return cls;
+                }));
+            };
+
+            return (
+                <div className="p-6">
+                    <h2 className="text-2xl font-bold mb-6">✏️ Registro de Presença - {currentClass.name}</h2>
+
+                    <div className="space-y-3">
+                        {currentClass.students.map(student => {
+                            const dayData = student.observations[selectedDate] || { presente: false, observacao: '' };
+                            const isBlocked = student.status !== STUDENT_STATUS.ATIVO;
+
+                            return (
+                                <div
+                                    key={student.id}
+                                    className={`border-2 rounded-lg p-4 ${
+                                        isBlocked ? 'bg-gray-100 opacity-60' : 'bg-white'
+                                    }`}
+                                >
+                                    <div className="flex items-center justify-between mb-3">
+                                        <div className="flex items-center gap-3 flex-1">
+                                            <button
+                                                onClick={() => togglePresence(student.id)}
+                                                disabled={!canEdit || isBlocked}
+                                                className={`w-12 h-12 rounded-lg font-bold text-lg transition-all ${
+                                                    dayData.presente
+                                                        ? 'bg-green-500 text-white'
+                                                        : 'bg-red-500 text-white'
+                                                } ${!canEdit || isBlocked ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`}
+                                            >
+                                                {dayData.presente ? 'P' : 'F'}
+                                            </button>
+                                            <div>
+                                                <p className="font-bold">{student.name}</p>
+                                                {isBlocked && (
+                                                    <p className="text-xs text-orange-600">
+                                                        {student.status === STUDENT_STATUS.TRANSFERIDO && '🔄 Transferido'}
+                                                        {student.status === STUDENT_STATUS.FALECIDO && '🕊️ Falecido'}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {!isBlocked && (
+                                        <input
+                                            type="text"
+                                            placeholder="Observação (opcional)"
+                                            value={dayData.observacao}
+                                            onChange={(e) => addObservation(student.id, e.target.value)}
+                                            disabled={!canEdit}
+                                            className="w-full p-2 border-2 rounded-lg text-sm"
+                                        />
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            );
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // 🏠 APP PRINCIPAL
+        // ═══════════════════════════════════════════════════════════════
+        function App() {
+            const [user, setUser] = useState(null);
+            const [users, setUsers] = useState(() => {
+                const saved = localStorage.getItem('systemUsers');
+                return saved ? JSON.parse(saved) : DEFAULT_USERS;
+            });
+            const [classes, setClasses] = useState([]);
+            const [selectedClass, setSelectedClass] = useState(null);
+            const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+            const [activeTab, setActiveTab] = useState('registro');
+            const [showManageClasses, setShowManageClasses] = useState(false);
+            const [showManageUsers, setShowManageUsers] = useState(false);
+            const [showManageStudents, setShowManageStudents] = useState(false);
+            const [syncing, setSyncing] = useState(false);
+            const [lastSync, setLastSync] = useState(null);
+
+            // Carregar dados
+            useEffect(() => {
+                const savedUser = localStorage.getItem('currentUser');
+                if (savedUser) setUser(JSON.parse(savedUser));
+                loadData();
+            }, []);
+
+            // Salvar usuários
+            useEffect(() => {
+                localStorage.setItem('systemUsers', JSON.stringify(users));
+            }, [users]);
+
+            const loadData = async () => {
+                const cloudData = await SyncManager.load();
+                if (cloudData?.classes) {
+                    setClasses(cloudData.classes);
+                    setLastSync(cloudData.lastSync);
+                    if (cloudData.users) setUsers(cloudData.users);
+                    return;
+                }
+
+                const savedData = localStorage.getItem('frequenciaEscolar_turmas');
+                if (savedData) {
+                    setClasses(JSON.parse(savedData));
+                }
+            };
+
+            useEffect(() => {
+                if (classes.length > 0) {
+                    localStorage.setItem('frequenciaEscolar_turmas', JSON.stringify(classes));
+                }
+            }, [classes]);
+
+            const handleSync = async () => {
+                setSyncing(true);
+                const success = await SyncManager.save({ classes, users });
+                setSyncing(false);
+                if (success) {
+                    setLastSync(new Date().toISOString());
+                    alert('✅ Sincronizado com sucesso!');
+                    await loadData(); // Recarregar após sync
+                } else {
+                    alert('❌ Erro ao sincronizar. Verifique a configuração.');
+                }
+            };
+
+            const handleLogin = (userData) => {
+                setUser(userData);
+                localStorage.setItem('currentUser', JSON.stringify(userData));
+            };
+
+            const handleLogout = () => {
+                setUser(null);
+                localStorage.removeItem('currentUser');
+            };
+
+            if (!user) {
+                return <LoginScreen onLogin={handleLogin} users={users} setUsers={setUsers} />;
+            }
+
+            return (
+                <div className="min-h-screen bg-gray-100">
+                    {/* Header */}
+                    <div className="bg-indigo-600 text-white p-4 shadow-lg no-print">
+                        <div className="max-w-6xl mx-auto flex justify-between items-center">
+                            <div>
+                                <h1 className="text-xl font-bold">📚 Frequência Escolar</h1>
+                                <p className="text-sm opacity-90">{user.name} ({user.role})</p>
+                            </div>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={handleSync}
+                                    disabled={syncing}
+                                    className="bg-white text-indigo-600 px-4 py-2 rounded-lg font-semibold hover:bg-gray-100 disabled:opacity-50 flex items-center gap-2"
+                                >
+                                    <Icon type={syncing ? 'refresh' : 'cloud'} size={20} />
+                                    {syncing ? 'Sincronizando...' : 'Sincronizar'}
+                                </button>
+                                <button
+                                    onClick={handleLogout}
+                                    className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 flex items-center gap-2"
+                                >
+                                    <Icon type="logout" size={20} />
+                                    Sair
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Controles principais */}
+                    <div className="max-w-6xl mx-auto p-4 no-print">
+                        <div className="bg-white rounded-lg shadow p-4 mb-4">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                {/* Seletor de turma */}
+                                <div>
+                                    <label className="block text-sm font-semibold mb-2">Turma:</label>
+                                    <select
+                                        value={selectedClass?.id || ''}
+                                        onChange={(e) => {
+                                            const cls = classes.find(c => c.id === parseInt(e.target.value));
+                                            setSelectedClass(cls);
+                                        }}
+                                        className="w-full p-3 border-2 rounded-lg"
+                                    >
+                                        <option value="">Selecione uma turma</option>
+                                        {classes.map(cls => (
+                                            <option key={cls.id} value={cls.id}>
+                                                {cls.name} ({cls.students.length} alunos)
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {/* Data */}
+                                <div>
+                                    <label className="block text-sm font-semibold mb-2">Data:</label>
+                                    <input
+                                        type="date"
+                                        value={selectedDate}
+                                        onChange={(e) => setSelectedDate(e.target.value)}
+                                        className="w-full p-3 border-2 rounded-lg"
+                                    />
+                                </div>
+
+                                {/* Botões de gerenciamento */}
+                                <div>
+                                    <label className="block text-sm font-semibold mb-2">Gerenciar:</label>
+                                    <div className="flex gap-2">
+                                        {user.canManageUsers && (
+                                            <button
+                                                onClick={() => setShowManageUsers(true)}
+                                                className="flex-1 bg-purple-600 text-white px-3 py-2 rounded-lg hover:bg-purple-700 text-sm font-semibold"
+                                                title="Gerenciar usuários do sistema"
+                                            >
+                                                <Icon type="users" size={18} />
+                                            </button>
+                                        )}
+                                        {user.canManageStudents && (
+                                            <>
+                                                <button
+                                                    onClick={() => setShowManageClasses(true)}
+                                                    className="flex-1 bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 text-sm font-semibold"
+                                                    title="Gerenciar turmas"
+                                                >
+                                                    Turmas
+                                                </button>
+                                                <button
+                                                    onClick={() => selectedClass && setShowManageStudents(true)}
+                                                    disabled={!selectedClass}
+                                                    className="flex-1 bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold"
+                                                    title="Gerenciar alunos"
+                                                >
+                                                    Alunos
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Tabs */}
+                        <div className="bg-white rounded-lg shadow mb-4">
+                            <div className="flex border-b">
+                                <button
+                                    onClick={() => setActiveTab('registro')}
+                                    className={`flex-1 py-3 font-semibold ${
+                                        activeTab === 'registro'
+                                            ? 'border-b-4 border-indigo-600 text-indigo-600'
+                                            : 'text-gray-600'
+                                    }`}
+                                >
+                                    ✏️ Registro
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('relatorio')}
+                                    className={`flex-1 py-3 font-semibold ${
+                                        activeTab === 'relatorio'
+                                            ? 'border-b-4 border-indigo-600 text-indigo-600'
+                                            : 'text-gray-600'
+                                    }`}
+                                >
+                                    📊 Relatórios
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Conteúdo */}
+                    <div className="max-w-6xl mx-auto">
+                        <div className="bg-white rounded-lg shadow">
+                            {activeTab === 'registro' && (
+                                <AttendanceRegister
+                                    selectedClass={selectedClass}
+                                    selectedDate={selectedDate}
+                                    classes={classes}
+                                    setClasses={setClasses}
+                                    canEdit={user.canEdit}
+                                />
+                            )}
+                            {activeTab === 'relatorio' && (
+                                <Reports
+                                    selectedClass={selectedClass}
+                                    classes={classes}
+                                />
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Modals */}
+                    {showManageUsers && (
+                        <ManageUsers
+                            users={users}
+                            setUsers={setUsers}
+                            onClose={() => setShowManageUsers(false)}
+                        />
+                    )}
+                    {showManageClasses && (
+                        <ManageClasses
+                            classes={classes}
+                            setClasses={setClasses}
+                            onClose={() => setShowManageClasses(false)}
+                        />
+                    )}
+                    {showManageStudents && selectedClass && (
+                        <ManageStudents
+                            selectedClass={selectedClass}
+                            classes={classes}
+                            setClasses={setClasses}
+                            onClose={() => setShowManageStudents(false)}
+                        />
+                    )}
+
+                    {/* Rodapé com info de sync */}
+                    {lastSync && (
+                        <div className="max-w-6xl mx-auto p-4 no-print">
+                            <p className="text-center text-sm text-gray-500">
+                                ☁️ Última sincronização: {new Date(lastSync).toLocaleString('pt-BR')}
+                            </p>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // Renderizar
+        ReactDOM.render(<App />, document.getElementById('root'));
+
+        // PWA Manifest
+        const manifest = {
+            name: "Frequência Escolar Pro",
+            short_name: "Frequência",
+            start_url: ".",
+            display: "standalone",
+            background_color: "#ffffff",
+            theme_color: "#6366f1",
+            icons: [{ src: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>📚</text></svg>", sizes: "512x512", type: "image/svg+xml" }]
+        };
+        
+        const manifestBlob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+        const manifestURL = URL.createObjectURL(manifestBlob);
+        document.getElementById('manifest-placeholder').setAttribute('href', manifestURL);
+    </script>
+</body>
+</html>
