@@ -87,11 +87,18 @@
         };
 
         // ═══════════════════════════════════════════════════════════════
-        // 🔄 SINCRONIZAÇÃO
+        // 🔄 SINCRONIZAÇÃO (CORRIGIDO PARA GITHUB)
         // ═══════════════════════════════════════════════════════════════
         class SyncManager {
             static async save(data) {
-                if (!SYNC_CONFIG.ENABLED || !SYNC_CONFIG.API_KEY.includes('$2a$')) return false;
+                if (!SYNC_CONFIG.ENABLED) return false;
+                
+                // Verificar se API Key está configurada
+                if (!SYNC_CONFIG.API_KEY || SYNC_CONFIG.API_KEY.includes('YOUR_API_KEY_HERE')) {
+                    console.error('API Key não configurada!');
+                    alert('⚠️ Configure a API Key do JSONBin primeiro!\nVeja o guia GUIA-SUPER-SIMPLES.md');
+                    return false;
+                }
                 
                 try {
                     const binId = localStorage.getItem('syncBinId') || SYNC_CONFIG.BIN_ID;
@@ -101,11 +108,14 @@
                     
                     const method = binId ? 'PUT' : 'POST';
                     
+                    console.log('🔄 Sincronizando...', { method, binId });
+                    
                     const response = await fetch(url, {
                         method: method,
                         headers: {
                             'Content-Type': 'application/json',
-                            'X-Master-Key': SYNC_CONFIG.API_KEY
+                            'X-Master-Key': SYNC_CONFIG.API_KEY,
+                            'X-Access-Key': SYNC_CONFIG.API_KEY // Fallback
                         },
                         body: JSON.stringify({
                             ...data,
@@ -113,41 +123,82 @@
                         })
                     });
                     
-                    if (!response.ok) throw new Error('Erro na sincronização');
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        console.error('Erro HTTP:', response.status, errorText);
+                        throw new Error(`Erro ${response.status}: ${errorText}`);
+                    }
                     
                     const result = await response.json();
                     const newBinId = result.metadata?.id || binId;
                     
                     if (newBinId) {
                         localStorage.setItem('syncBinId', newBinId);
+                        console.log('✅ Sincronizado! Bin ID:', newBinId);
                     }
                     
                     return true;
                 } catch (error) {
-                    console.error('Erro ao salvar:', error);
+                    console.error('❌ Erro ao salvar:', error);
+                    
+                    // Mensagem de erro mais clara
+                    if (error.message.includes('401')) {
+                        alert('❌ API Key inválida ou expirada!\n\n' +
+                              '1. Acesse: https://jsonbin.io\n' +
+                              '2. Faça login\n' +
+                              '3. API Keys → Gere uma nova\n' +
+                              '4. Cole no código (linha 51)');
+                    } else if (error.message.includes('Failed to fetch')) {
+                        alert('❌ Erro de conexão!\n\nVerifique:\n' +
+                              '1. Você está conectado à internet?\n' +
+                              '2. JSONBin está funcionando?\n' +
+                              '3. Tente novamente em alguns segundos');
+                    } else {
+                        alert('❌ Erro ao sincronizar: ' + error.message);
+                    }
+                    
                     return false;
                 }
             }
 
             static async load() {
-                if (!SYNC_CONFIG.ENABLED || !SYNC_CONFIG.API_KEY.includes('$2a$')) return null;
+                if (!SYNC_CONFIG.ENABLED) return null;
+                
+                // Verificar se API Key está configurada
+                if (!SYNC_CONFIG.API_KEY || SYNC_CONFIG.API_KEY.includes('YOUR_API_KEY_HERE')) {
+                    return null;
+                }
                 
                 try {
                     const binId = localStorage.getItem('syncBinId') || SYNC_CONFIG.BIN_ID;
-                    if (!binId) return null;
+                    if (!binId) {
+                        console.log('ℹ️ Nenhum Bin ID encontrado. Primeira sincronização.');
+                        return null;
+                    }
+                    
+                    console.log('📥 Carregando dados...', binId);
                     
                     const response = await fetch(`${SYNC_CONFIG.API_URL}/b/${binId}/latest`, {
+                        method: 'GET',
                         headers: {
-                            'X-Master-Key': SYNC_CONFIG.API_KEY
+                            'X-Master-Key': SYNC_CONFIG.API_KEY,
+                            'X-Access-Key': SYNC_CONFIG.API_KEY // Fallback
                         }
                     });
                     
-                    if (!response.ok) throw new Error('Erro ao carregar');
+                    if (!response.ok) {
+                        if (response.status === 404) {
+                            console.log('ℹ️ Bin não encontrado. Criando novo...');
+                            return null;
+                        }
+                        throw new Error(`Erro ${response.status}`);
+                    }
                     
                     const result = await response.json();
+                    console.log('✅ Dados carregados!');
                     return result.record;
                 } catch (error) {
-                    console.error('Erro ao carregar:', error);
+                    console.error('❌ Erro ao carregar:', error);
                     return null;
                 }
             }
