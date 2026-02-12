@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Frequência Escolar Pro</title>
+    <title>Frequência Escolar</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -12,15 +12,15 @@
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         .animate-spin { animation: spin 1s linear infinite; }
         @media print { .no-print { display: none !important; } }
-        .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .header-gradient { background: linear-gradient(135deg, #5b5fc7 0%, #7c4dff 100%); }
     </style>
 </head>
-<body>
+<body class="bg-gray-50">
     <div id="root"></div>
     <script type="text/babel">
         const { useState, useEffect } = React;
         
-        const DEFAULT_USERS = { admin: { password: 'admin123', role: 'admin', name: 'Administrador' } };
+        const DEFAULT_USERS = { admin: { password: 'admin123', role: 'admin', name: 'Administrador Principal' } };
         const STUDENT_STATUS = { ATIVO: 'ativo', TRANSFERIDO: 'transferido', FALECIDO: 'falecido' };
         const ATTENDANCE_STATUS = { PRESENTE: 'presente', FALTA: 'falta', JUSTIFICADA: 'justificada' };
         const API_URL = 'https://api.jsonbin.io/v3';
@@ -67,7 +67,7 @@
             const [classes, setClasses] = useState([]);
             const [selectedClass, setSelectedClass] = useState(null);
             const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-            const [activeTab, setActiveTab] = useState('registro');
+            const [activeTab, setActiveTab] = useState('dashboard');
             const [showConfig, setShowConfig] = useState(false);
             const [showUsers, setShowUsers] = useState(false);
             const [showClasses, setShowClasses] = useState(false);
@@ -97,72 +97,37 @@
                 setLastSync(new Date().toISOString());
             };
             
+            const manualSync = async () => {
+                setSyncing(true);
+                await autoSync();
+                setTimeout(() => setSyncing(false), 1000);
+            };
+            
             const handleLogin = (e) => {
                 e.preventDefault();
                 const fd = new FormData(e.target);
                 const login = fd.get('login');
                 const pass = fd.get('password');
                 const u = users[login];
-                if (u && u.password === pass) setUser({ login, ...u });
-                else alert('❌ Login ou senha incorretos!');
-            };
-            
-            const handleLogout = () => setUser(null);
-            
-            const addClass = (name) => {
-                const id = Date.now();
-                setClasses(prev => [...prev, { id, name, students: [] }]);
-            };
-            
-            const addStudent = (classId, studentData) => {
-                setClasses(prev => prev.map(c => 
-                    c.id === classId 
-                        ? { ...c, students: [...c.students, { ...studentData, id: Date.now(), observations: {} }] }
-                        : c
-                ));
-            };
-            
-            const updateStudent = (classId, studentId, updates) => {
-                setClasses(prev => prev.map(c =>
-                    c.id === classId
-                        ? { ...c, students: c.students.map(s => s.id === studentId ? { ...s, ...updates } : s) }
-                        : c
-                ));
-            };
-            
-            const deleteClass = (id) => {
-                if (confirm('⚠️ Excluir turma?')) setClasses(prev => prev.filter(c => c.id !== id));
-            };
-            
-            const deleteStudent = (classId, studentId) => {
-                if (confirm('⚠️ Excluir aluno?')) {
-                    setClasses(prev => prev.map(c =>
-                        c.id === classId ? { ...c, students: c.students.filter(s => s.id !== studentId) } : c
-                    ));
-                }
-            };
-            
-            const addUser = (login, name, password, role) => {
-                if (users[login]) return alert('❌ Login já existe!');
-                setUsers(prev => ({ ...prev, [login]: { name, password, role } }));
-                alert('✅ Usuário criado!');
-            };
-            
-            const deleteUser = (login) => {
-                if (login === 'admin') return alert('❌ Admin não pode ser excluído!');
-                if (confirm('⚠️ Excluir usuário?')) {
-                    const { [login]: _, ...rest } = users;
-                    setUsers(rest);
+                if (u && u.password === pass) {
+                    setUser({ 
+                        login, 
+                        ...u, 
+                        canEdit: u.role === 'admin' || u.role === 'editor',
+                        canManage: u.role === 'admin'
+                    });
+                } else {
+                    alert('❌ Login ou senha incorretos!');
                 }
             };
             
             if (!user) {
                 return (
-                    <div className="min-h-screen gradient-bg flex items-center justify-center p-4">
+                    <div className="min-h-screen header-gradient flex items-center justify-center p-4">
                         <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
                             <div className="text-center mb-8">
-                                <h1 className="text-4xl font-bold text-indigo-600 mb-2">📚 Frequência Pro</h1>
-                                <p className="text-gray-600">Sistema de Controle Escolar</p>
+                                <h1 className="text-4xl font-bold text-indigo-600 mb-2">📚 Frequência Escolar</h1>
+                                <p className="text-gray-600">Sistema de Controle de Frequência</p>
                             </div>
                             <form onSubmit={handleLogin} className="space-y-4">
                                 <div>
@@ -183,101 +148,324 @@
             const cls = classes.find(c => c.id === selectedClass);
             
             return (
-                <div className="min-h-screen bg-gray-50">
-                    <div className="gradient-bg text-white p-4 shadow-lg">
-                        <div className="max-w-7xl mx-auto flex justify-between items-center">
-                            <div>
-                                <h1 className="text-2xl font-bold">📚 Frequência Pro</h1>
-                                <p className="text-sm opacity-90">👤 {user.name} ({user.role === 'admin' ? '👑 Admin' : user.role === 'editor' ? '📝 Alimentador' : '👁️ Observador'})</p>
-                            </div>
-                            <div className="flex items-center gap-3">
-                                {syncing && <div className="w-6 h-6 border-2 border-white rounded-full border-t-transparent animate-spin"></div>}
-                                {lastSync && <span className="text-sm">☁️ {new Date(lastSync).toLocaleTimeString()}</span>}
-                                {user.role === 'admin' && (
-                                    <>
-                                        <button onClick={() => setShowConfig(true)} className="bg-white text-indigo-600 px-4 py-2 rounded-lg font-semibold hover:bg-indigo-50">⚙️</button>
-                                        <button onClick={() => setShowUsers(true)} className="bg-white text-indigo-600 px-4 py-2 rounded-lg font-semibold hover:bg-indigo-50">👥</button>
-                                    </>
-                                )}
-                                <button onClick={handleLogout} className="bg-red-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-red-600">🚪</button>
+                <div className="min-h-screen">
+                    {/* Cabeçalho */}
+                    <div className="header-gradient text-white shadow-lg no-print">
+                        <div className="max-w-7xl mx-auto px-6 py-6">
+                            <div className="flex justify-between items-center">
+                                <div className="flex items-center gap-3">
+                                    <span className="text-4xl">📚</span>
+                                    <div>
+                                        <h1 className="text-3xl font-bold">Frequência Escolar</h1>
+                                        <p className="text-sm opacity-90">{user.name}</p>
+                                    </div>
+                                </div>
+                                <div className="flex gap-3">
+                                    {user.canManage && (
+                                        <button onClick={() => setShowConfig(true)} 
+                                            className="bg-white text-gray-700 p-3 rounded-lg hover:bg-gray-100 transition">
+                                            ⚙️
+                                        </button>
+                                    )}
+                                    <button onClick={manualSync} 
+                                        className="bg-white text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-100 transition font-semibold flex items-center gap-2">
+                                        <span className={syncing ? 'animate-spin' : ''}>☁️</span>
+                                        Sincronizar
+                                    </button>
+                                    <button onClick={() => setUser(null)} 
+                                        className="bg-red-500 text-white p-3 rounded-lg hover:bg-red-600 transition">
+                                        🚪
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
                     
-                    <div className="max-w-7xl mx-auto p-4">
-                        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-4">
-                            <div className="lg:col-span-1 bg-white rounded-lg shadow p-4">
-                                <div className="flex justify-between items-center mb-4">
-                                    <h2 className="text-xl font-bold">🏫 Turmas</h2>
-                                    {user.role === 'admin' && (
-                                        <button onClick={() => setShowClasses(true)} className="bg-indigo-600 text-white px-3 py-1 rounded text-sm">➕</button>
-                                    )}
+                    {/* Área de Controle */}
+                    <div className="bg-white shadow-md no-print">
+                        <div className="max-w-7xl mx-auto px-6 py-6">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Turma:</label>
+                                    <select value={selectedClass || ''} 
+                                        onChange={(e) => setSelectedClass(e.target.value ? Number(e.target.value) : null)}
+                                        className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-indigo-500 outline-none bg-white">
+                                        <option value="">Selecione</option>
+                                        {classes.map(c => (
+                                            <option key={c.id} value={c.id}>{c.name} ({c.students.length} alunos)</option>
+                                        ))}
+                                    </select>
                                 </div>
-                                <div className="space-y-2">
-                                    {classes.map(c => (
-                                        <div key={c.id} className="flex items-center gap-2">
-                                            <button onClick={() => setSelectedClass(c.id)} 
-                                                className={`flex-1 text-left px-3 py-2 rounded-lg font-semibold ${c.id === selectedClass ? 'bg-indigo-600 text-white' : 'bg-gray-100 hover:bg-gray-200'}`}>
-                                                {c.name}
-                                            </button>
-                                            {user.role === 'admin' && (
-                                                <button onClick={() => deleteClass(c.id)} className="text-red-600 px-2 py-1 hover:bg-red-50 rounded">🗑️</button>
-                                            )}
-                                        </div>
-                                    ))}
+                                
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Data:</label>
+                                    <input type="date" value={selectedDate} 
+                                        onChange={(e) => setSelectedDate(e.target.value)}
+                                        className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-indigo-500 outline-none" />
                                 </div>
-                            </div>
-                            
-                            <div className="lg:col-span-3 bg-white rounded-lg shadow p-4">
-                                {!cls ? (
-                                    <p className="text-gray-500 text-center py-8">Selecione uma turma</p>
-                                ) : (
-                                    <>
-                                        <div className="flex gap-2 mb-4 border-b">
-                                            <button onClick={() => setActiveTab('registro')} className={`px-4 py-2 font-semibold ${activeTab === 'registro' ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-gray-600'}`}>
-                                                ✏️ Registro
+                                
+                                {user.canManage && (
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-2">Gerenciar:</label>
+                                        <div className="flex gap-2">
+                                            <button onClick={() => setShowUsers(true)}
+                                                className="flex-1 bg-purple-600 text-white py-3 px-4 rounded-lg hover:bg-purple-700 transition font-semibold">
+                                                👥
                                             </button>
-                                            <button onClick={() => setActiveTab('relatorio')} className={`px-4 py-2 font-semibold ${activeTab === 'relatorio' ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-gray-600'}`}>
-                                                📊 Relatórios
+                                            <button onClick={() => setShowClasses(true)}
+                                                className="flex-1 bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition font-semibold">
+                                                Turmas
                                             </button>
-                                            {user.role === 'admin' && (
-                                                <button onClick={() => setActiveTab('alunos')} className={`px-4 py-2 font-semibold ${activeTab === 'alunos' ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-gray-600'}`}>
-                                                    👨‍🎓 Alunos
-                                                </button>
-                                            )}
+                                            <button onClick={() => setShowStudents(true)} disabled={!cls}
+                                                className={`flex-1 py-3 px-4 rounded-lg transition font-semibold ${
+                                                    cls ? 'bg-blue-500 text-white hover:bg-blue-600' : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                                }`}>
+                                                Alunos
+                                            </button>
                                         </div>
-                                        
-                                        {activeTab === 'registro' && (
-                                            <div>
-                                                <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} 
-                                                    className="mb-4 px-4 py-2 border-2 rounded-lg" />
-                                                <AttendancePanel class={cls} date={selectedDate} setClasses={setClasses} canEdit={user.role !== 'viewer'} />
-                                            </div>
-                                        )}
-                                        {activeTab === 'relatorio' && <Reports class={cls} />}
-                                        {activeTab === 'alunos' && user.role === 'admin' && (
-                                            <StudentsManager class={cls} onAdd={(s) => addStudent(cls.id, s)} 
-                                                onUpdate={(sid, u) => updateStudent(cls.id, sid, u)}
-                                                onDelete={(sid) => deleteStudent(cls.id, sid)} />
-                                        )}
-                                    </>
+                                    </div>
                                 )}
                             </div>
                         </div>
                     </div>
+                    
+                    {/* Abas */}
+                    <div className="bg-white shadow-sm no-print">
+                        <div className="max-w-7xl mx-auto px-6">
+                            <div className="flex border-b-2">
+                                <button onClick={() => setActiveTab('dashboard')} 
+                                    className={`px-6 py-4 font-semibold transition ${
+                                        activeTab === 'dashboard' 
+                                            ? 'text-indigo-600 border-b-4 border-indigo-600 -mb-0.5' 
+                                            : 'text-gray-600 hover:text-indigo-600'
+                                    }`}>
+                                    📊 Dashboard
+                                </button>
+                                <button onClick={() => setActiveTab('registro')} 
+                                    className={`px-6 py-4 font-semibold transition ${
+                                        activeTab === 'registro' 
+                                            ? 'text-indigo-600 border-b-4 border-indigo-600 -mb-0.5' 
+                                            : 'text-gray-600 hover:text-indigo-600'
+                                    }`}>
+                                    ✏️ Registro
+                                </button>
+                                <button onClick={() => setActiveTab('relatorios')} 
+                                    className={`px-6 py-4 font-semibold transition ${
+                                        activeTab === 'relatorios' 
+                                            ? 'text-indigo-600 border-b-4 border-indigo-600 -mb-0.5' 
+                                            : 'text-gray-600 hover:text-indigo-600'
+                                    }`}>
+                                    📈 Relatórios
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {/* Conteúdo */}
+                    <div className="max-w-7xl mx-auto px-6 py-6">
+                        {!cls ? (
+                            <div className="bg-white rounded-lg shadow-md p-12 text-center">
+                                <p className="text-gray-500 text-lg">Selecione uma turma</p>
+                            </div>
+                        ) : (
+                            <div className="bg-white rounded-lg shadow-md p-6">
+                                {activeTab === 'dashboard' && <Dashboard class={cls} />}
+                                {activeTab === 'registro' && <Registro class={cls} date={selectedDate} setClasses={setClasses} canEdit={user.canEdit} />}
+                                {activeTab === 'relatorios' && <Relatorios class={cls} />}
+                            </div>
+                        )}
+                    </div>
+                    
+                    {lastSync && (
+                        <p className="text-center text-sm text-gray-500 py-4 no-print">
+                            ☁️ Última sincronização: {new Date(lastSync).toLocaleString('pt-BR')}
+                        </p>
+                    )}
                     
                     {showConfig && <ConfigModal onClose={() => setShowConfig(false)} />}
-                    {showUsers && <UsersModal users={users} onAdd={addUser} onDelete={deleteUser} onClose={() => setShowUsers(false)} />}
-                    {showClasses && <ClassModal onAdd={addClass} onClose={() => setShowClasses(false)} />}
+                    {showUsers && <UsersModal users={users} setUsers={setUsers} onClose={() => setShowUsers(false)} />}
+                    {showClasses && <ClassesModal classes={classes} setClasses={setClasses} onClose={() => setShowClasses(false)} />}
+                    {showStudents && cls && <StudentsModal class={cls} classes={classes} setClasses={setClasses} onClose={() => setShowStudents(false)} />}
                 </div>
             );
         }
         
-        function AttendancePanel({ class: cls, date, setClasses, canEdit }) {
+        function Dashboard({ class: cls }) {
+            const totalStudents = cls.students.length;
+            const activeStudents = cls.students.filter(s => s.status === 'ativo').length;
+            const transferredStudents = cls.students.filter(s => s.status === 'transferido').length;
+            const deceasedStudents = cls.students.filter(s => s.status === 'falecido').length;
+            
+            const allDates = new Set();
+            cls.students.forEach(s => Object.keys(s.observations).forEach(d => allDates.add(d)));
+            const totalDays = allDates.size;
+            
+            let totalPresent = 0, totalJustified = 0, totalAbsent = 0;
+            cls.students.forEach(s => {
+                Object.values(s.observations).forEach(obs => {
+                    if (obs.status === 'presente') totalPresent++;
+                    else if (obs.status === 'justificada') totalJustified++;
+                    else if (obs.status === 'falta') totalAbsent++;
+                });
+            });
+            
+            const totalRecords = totalPresent + totalJustified + totalAbsent;
+            const avgAttendance = totalRecords > 0 ? ((totalPresent / totalRecords) * 100).toFixed(1) : 0;
+            
+            const stats = cls.students.map(s => {
+                const obs = Object.entries(s.observations);
+                const total = obs.length;
+                const present = obs.filter(([_, d]) => d.status === 'presente').length;
+                const pct = total > 0 ? ((present / total) * 100).toFixed(1) : 0;
+                return { name: s.name, pct: parseFloat(pct), status: s.status };
+            }).filter(s => s.status === 'ativo').sort((a, b) => b.pct - a.pct);
+            
+            const topStudents = stats.slice(0, 5);
+            const lowStudents = stats.slice(-5).reverse();
+            
+            return (
+                <div>
+                    <h2 className="text-3xl font-bold text-gray-800 mb-6">📊 Dashboard - {cls.name}</h2>
+                    
+                    {/* Cards Principais */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                        <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white p-6 rounded-xl shadow-lg">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm opacity-90 mb-1">Total de Alunos</p>
+                                    <p className="text-4xl font-bold">{totalStudents}</p>
+                                </div>
+                                <div className="text-5xl opacity-80">👥</div>
+                            </div>
+                        </div>
+                        
+                        <div className="bg-gradient-to-br from-green-500 to-green-600 text-white p-6 rounded-xl shadow-lg">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm opacity-90 mb-1">Alunos Ativos</p>
+                                    <p className="text-4xl font-bold">{activeStudents}</p>
+                                </div>
+                                <div className="text-5xl opacity-80">✅</div>
+                            </div>
+                        </div>
+                        
+                        <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white p-6 rounded-xl shadow-lg">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm opacity-90 mb-1">Dias Registrados</p>
+                                    <p className="text-4xl font-bold">{totalDays}</p>
+                                </div>
+                                <div className="text-5xl opacity-80">📅</div>
+                            </div>
+                        </div>
+                        
+                        <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 text-white p-6 rounded-xl shadow-lg">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm opacity-90 mb-1">Frequência Média</p>
+                                    <p className="text-4xl font-bold">{avgAttendance}%</p>
+                                </div>
+                                <div className="text-5xl opacity-80">📈</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {/* Cards de Frequência */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                        <div className="bg-green-50 border-2 border-green-200 p-6 rounded-xl">
+                            <div className="flex items-center justify-between mb-2">
+                                <p className="text-green-700 font-semibold">✅ Presenças</p>
+                                <span className="text-3xl">✅</span>
+                            </div>
+                            <p className="text-4xl font-bold text-green-900">{totalPresent}</p>
+                            <div className="mt-3 bg-green-200 rounded-full h-2">
+                                <div className="bg-green-600 h-2 rounded-full" 
+                                    style={{width: totalRecords > 0 ? `${(totalPresent/totalRecords)*100}%` : '0%'}}></div>
+                            </div>
+                        </div>
+                        
+                        <div className="bg-yellow-50 border-2 border-yellow-200 p-6 rounded-xl">
+                            <div className="flex items-center justify-between mb-2">
+                                <p className="text-yellow-700 font-semibold">📝 Faltas Justificadas</p>
+                                <span className="text-3xl">📝</span>
+                            </div>
+                            <p className="text-4xl font-bold text-yellow-900">{totalJustified}</p>
+                            <div className="mt-3 bg-yellow-200 rounded-full h-2">
+                                <div className="bg-yellow-600 h-2 rounded-full" 
+                                    style={{width: totalRecords > 0 ? `${(totalJustified/totalRecords)*100}%` : '0%'}}></div>
+                            </div>
+                        </div>
+                        
+                        <div className="bg-red-50 border-2 border-red-200 p-6 rounded-xl">
+                            <div className="flex items-center justify-between mb-2">
+                                <p className="text-red-700 font-semibold">❌ Faltas</p>
+                                <span className="text-3xl">❌</span>
+                            </div>
+                            <p className="text-4xl font-bold text-red-900">{totalAbsent}</p>
+                            <div className="mt-3 bg-red-200 rounded-full h-2">
+                                <div className="bg-red-600 h-2 rounded-full" 
+                                    style={{width: totalRecords > 0 ? `${(totalAbsent/totalRecords)*100}%` : '0%'}}></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {/* Rankings */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div className="bg-green-50 border-2 border-green-200 rounded-xl p-6">
+                            <h3 className="text-xl font-bold text-green-900 mb-4">🏆 Melhor Frequência</h3>
+                            <div className="space-y-2">
+                                {topStudents.map((s, i) => (
+                                    <div key={i} className="flex items-center gap-3 bg-white p-3 rounded-lg">
+                                        <span className="text-2xl font-bold text-green-600">#{i+1}</span>
+                                        <span className="flex-1 font-semibold">{s.name}</span>
+                                        <span className="font-bold text-green-700">{s.pct}%</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        
+                        <div className="bg-red-50 border-2 border-red-200 rounded-xl p-6">
+                            <h3 className="text-xl font-bold text-red-900 mb-4">⚠️ Atenção Necessária</h3>
+                            <div className="space-y-2">
+                                {lowStudents.map((s, i) => (
+                                    <div key={i} className="flex items-center gap-3 bg-white p-3 rounded-lg">
+                                        <span className="text-2xl">⚠️</span>
+                                        <span className="flex-1 font-semibold">{s.name}</span>
+                                        <span className="font-bold text-red-700">{s.pct}%</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {/* Status dos Alunos */}
+                    {(transferredStudents > 0 || deceasedStudents > 0) && (
+                        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {transferredStudents > 0 && (
+                                <div className="bg-orange-50 border-2 border-orange-200 p-4 rounded-lg">
+                                    <p className="text-orange-900 font-semibold">
+                                        🔄 {transferredStudents} aluno(s) transferido(s)
+                                    </p>
+                                </div>
+                            )}
+                            {deceasedStudents > 0 && (
+                                <div className="bg-gray-100 border-2 border-gray-300 p-4 rounded-lg">
+                                    <p className="text-gray-700 font-semibold">
+                                        🕊️ {deceasedStudents} aluno(s) falecido(s)
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+        
+        function Registro({ class: cls, date, setClasses, canEdit }) {
             const setStatus = (sid, status) => {
-                if (!canEdit) return alert('⚠️ Sem permissão!');
+                if (!canEdit) return alert('⚠️ Sem permissão para editar!');
                 const s = cls.students.find(st => st.id === sid);
-                if (s.status !== 'ativo') return alert('⚠️ Aluno não ativo!');
+                if (s.status !== 'ativo') return alert('⚠️ Aluno não está ativo!');
                 
                 setClasses(prev => prev.map(c => {
                     if (c.id === cls.id) {
@@ -298,147 +486,132 @@
             };
             
             return (
-                <div className="space-y-3">
-                    <h2 className="text-2xl font-bold mb-4">✏️ {cls.name} - {new Date(date + 'T00:00:00').toLocaleDateString('pt-BR')}</h2>
-                    {cls.students.map(s => {
-                        const data = s.observations[date] || { status: null, observacao: '' };
-                        const blocked = s.status !== 'ativo';
-                        return (
-                            <div key={s.id} className={`border-2 rounded-lg p-4 ${blocked ? 'opacity-50 bg-gray-100' : ''}`}>
-                                <div className="flex items-center gap-3 flex-wrap">
-                                    <div className="flex gap-2">
-                                        <button 
-                                            onClick={() => setStatus(s.id, ATTENDANCE_STATUS.PRESENTE)} 
-                                            disabled={blocked || !canEdit}
-                                            className={`px-6 py-3 rounded-lg font-bold text-white transition-all ${
-                                                data.status === ATTENDANCE_STATUS.PRESENTE 
-                                                    ? 'bg-green-600 ring-4 ring-green-300' 
-                                                    : 'bg-green-400 hover:bg-green-500'
-                                            } ${!canEdit || blocked ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`}>
-                                            ✅ PRESENTE
-                                        </button>
-                                        <button 
-                                            onClick={() => setStatus(s.id, ATTENDANCE_STATUS.JUSTIFICADA)} 
-                                            disabled={blocked || !canEdit}
-                                            className={`px-6 py-3 rounded-lg font-bold text-white transition-all ${
-                                                data.status === ATTENDANCE_STATUS.JUSTIFICADA 
-                                                    ? 'bg-yellow-600 ring-4 ring-yellow-300' 
-                                                    : 'bg-yellow-400 hover:bg-yellow-500'
-                                            } ${!canEdit || blocked ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`}>
-                                            📝 FALTA JUSTIFICADA
-                                        </button>
-                                        <button 
-                                            onClick={() => setStatus(s.id, ATTENDANCE_STATUS.FALTA)} 
-                                            disabled={blocked || !canEdit}
-                                            className={`px-6 py-3 rounded-lg font-bold text-white transition-all ${
-                                                data.status === ATTENDANCE_STATUS.FALTA 
-                                                    ? 'bg-red-600 ring-4 ring-red-300' 
-                                                    : 'bg-red-400 hover:bg-red-500'
-                                            } ${!canEdit || blocked ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`}>
-                                            ❌ FALTA
-                                        </button>
+                <div>
+                    <h2 className="text-2xl font-bold text-gray-800 mb-6">
+                        ✏️ Registro de Frequência - {new Date(date + 'T00:00:00').toLocaleDateString('pt-BR')}
+                    </h2>
+                    
+                    {cls.students.length === 0 ? (
+                        <p className="text-gray-500 text-center py-8">Nenhum aluno cadastrado nesta turma</p>
+                    ) : (
+                        <div className="space-y-3">
+                            {cls.students.map(s => {
+                                const data = s.observations[date] || { status: null };
+                                const blocked = s.status !== 'ativo';
+                                return (
+                                    <div key={s.id} className={`border-2 rounded-lg p-4 ${blocked ? 'opacity-50 bg-gray-100' : 'bg-white'}`}>
+                                        <div className="flex items-center gap-3 flex-wrap">
+                                            <div className="flex gap-2">
+                                                <button 
+                                                    onClick={() => setStatus(s.id, 'presente')} 
+                                                    disabled={blocked || !canEdit}
+                                                    className={`px-8 py-3 rounded-lg font-bold text-white transition-all ${
+                                                        data.status === 'presente' 
+                                                            ? 'bg-green-600 ring-4 ring-green-300 scale-105' 
+                                                            : 'bg-green-400 hover:bg-green-500'
+                                                    } ${!canEdit || blocked ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`}>
+                                                    ✅ PRESENTE
+                                                </button>
+                                                <button 
+                                                    onClick={() => setStatus(s.id, 'justificada')} 
+                                                    disabled={blocked || !canEdit}
+                                                    className={`px-8 py-3 rounded-lg font-bold text-white transition-all ${
+                                                        data.status === 'justificada' 
+                                                            ? 'bg-yellow-600 ring-4 ring-yellow-300 scale-105' 
+                                                            : 'bg-yellow-400 hover:bg-yellow-500'
+                                                    } ${!canEdit || blocked ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`}>
+                                                    📝 FALTA JUSTIFICADA
+                                                </button>
+                                                <button 
+                                                    onClick={() => setStatus(s.id, 'falta')} 
+                                                    disabled={blocked || !canEdit}
+                                                    className={`px-8 py-3 rounded-lg font-bold text-white transition-all ${
+                                                        data.status === 'falta' 
+                                                            ? 'bg-red-600 ring-4 ring-red-300 scale-105' 
+                                                            : 'bg-red-400 hover:bg-red-500'
+                                                    } ${!canEdit || blocked ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`}>
+                                                    ❌ FALTA
+                                                </button>
+                                            </div>
+                                            <p className="font-bold text-lg flex-1">{s.name}</p>
+                                            {blocked && (
+                                                <span className="text-sm text-gray-500 font-semibold">
+                                                    {s.status === 'transferido' ? '🔄 Transferido' : '🕊️ Falecido'}
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
-                                    <p className="font-bold text-lg flex-1">{s.name}</p>
-                                </div>
-                            </div>
-                        );
-                    })}
+                                );
+                            })}
+                        </div>
+                    )}
                 </div>
             );
         }
         
-        function Reports({ class: cls }) {
-            if (!cls) return <p>Selecione uma turma</p>;
-            
+        function Relatorios({ class: cls }) {
             const stats = cls.students.map(s => {
                 const obs = Object.entries(s.observations);
                 const total = obs.length;
-                const present = obs.filter(([_, d]) => d.status === ATTENDANCE_STATUS.PRESENTE).length;
-                const justified = obs.filter(([_, d]) => d.status === ATTENDANCE_STATUS.JUSTIFICADA).length;
-                const absent = obs.filter(([_, d]) => d.status === ATTENDANCE_STATUS.FALTA).length;
+                const present = obs.filter(([_, d]) => d.status === 'presente').length;
+                const justified = obs.filter(([_, d]) => d.status === 'justificada').length;
+                const absent = obs.filter(([_, d]) => d.status === 'falta').length;
                 const pct = total > 0 ? ((present / total) * 100).toFixed(1) : 0;
                 return { name: s.name, status: s.status, total, present, justified, absent, pct: parseFloat(pct) };
             }).sort((a, b) => b.pct - a.pct);
             
             return (
                 <div>
-                    <div className="flex justify-between mb-4 no-print">
-                        <h2 className="text-2xl font-bold">📊 {cls.name}</h2>
-                        <button onClick={() => window.print()} className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700">🖨️ Imprimir</button>
-                    </div>
-                    <table className="w-full border-2 rounded-lg">
-                        <thead className="bg-gray-100">
-                            <tr>
-                                <th className="px-4 py-3 text-left">Aluno</th>
-                                <th className="px-4 py-3 text-center">Status</th>
-                                <th className="px-4 py-3 text-center">Dias</th>
-                                <th className="px-4 py-3 text-center bg-green-100">✅ P</th>
-                                <th className="px-4 py-3 text-center bg-yellow-100">📝 FJ</th>
-                                <th className="px-4 py-3 text-center bg-red-100">❌ F</th>
-                                <th className="px-4 py-3">%</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {stats.map((st, i) => (
-                                <tr key={i} className="border-t hover:bg-gray-50">
-                                    <td className="px-4 py-3 font-medium">{st.name}</td>
-                                    <td className="px-4 py-3 text-center">
-                                        {st.status === 'ativo' ? '✅' : st.status === 'transferido' ? '🔄' : '🕊️'}
-                                    </td>
-                                    <td className="px-4 py-3 text-center font-semibold">{st.total}</td>
-                                    <td className="px-4 py-3 text-center text-green-600 font-bold">{st.present}</td>
-                                    <td className="px-4 py-3 text-center text-yellow-600 font-bold">{st.justified}</td>
-                                    <td className="px-4 py-3 text-center text-red-600 font-bold">{st.absent}</td>
-                                    <td className="px-4 py-3">
-                                        <div className="flex items-center gap-2">
-                                            <div className="flex-1 bg-gray-200 rounded-full h-6">
-                                                <div className="h-full bg-green-600 rounded-full" style={{width: `${st.pct}%`}}></div>
-                                            </div>
-                                            <span className="font-bold text-sm w-12 text-right">{st.pct}%</span>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            );
-        }
-        
-        function StudentsManager({ class: cls, onAdd, onUpdate, onDelete }) {
-            const [name, setName] = useState('');
-            
-            const handleAdd = () => {
-                if (!name.trim()) return alert('❌ Digite o nome!');
-                onAdd({ name, status: STUDENT_STATUS.ATIVO });
-                setName('');
-            };
-            
-            return (
-                <div>
-                    <div className="mb-6 flex gap-2">
-                        <input value={name} onChange={(e) => setName(e.target.value)} 
-                            placeholder="Nome do aluno" className="flex-1 px-4 py-2 border-2 rounded-lg" />
-                        <button onClick={handleAdd} className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-indigo-700">
-                            ➕ Adicionar
+                    <div className="flex justify-between items-center mb-6 no-print">
+                        <h2 className="text-2xl font-bold text-gray-800">📈 Relatório Completo</h2>
+                        <button onClick={() => window.print()} 
+                            className="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 transition font-semibold">
+                            🖨️ Imprimir
                         </button>
                     </div>
-                    <div className="space-y-2">
-                        {cls.students.map(s => (
-                            <div key={s.id} className="flex items-center gap-3 p-3 border rounded-lg">
-                                <span className="flex-1 font-semibold">{s.name}</span>
-                                <select value={s.status} onChange={(e) => onUpdate(s.id, { status: e.target.value })}
-                                    className="px-3 py-1 border rounded">
-                                    <option value={STUDENT_STATUS.ATIVO}>✅ Ativo</option>
-                                    <option value={STUDENT_STATUS.TRANSFERIDO}>🔄 Transferido</option>
-                                    <option value={STUDENT_STATUS.FALECIDO}>🕊️ Falecido</option>
-                                </select>
-                                <button onClick={() => onDelete(s.id)} className="text-red-600 px-3 py-1 hover:bg-red-50 rounded">
-                                    🗑️
-                                </button>
-                            </div>
-                        ))}
-                    </div>
+                    
+                    {cls.students.length === 0 ? (
+                        <p className="text-gray-500 text-center py-8">Nenhum aluno cadastrado nesta turma</p>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <table className="w-full border-2 rounded-lg">
+                                <thead className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white">
+                                    <tr>
+                                        <th className="px-6 py-4 text-left">Aluno</th>
+                                        <th className="px-4 py-4 text-center">Status</th>
+                                        <th className="px-4 py-4 text-center">Dias</th>
+                                        <th className="px-4 py-4 text-center bg-green-600 bg-opacity-30">✅ P</th>
+                                        <th className="px-4 py-4 text-center bg-yellow-600 bg-opacity-30">📝 FJ</th>
+                                        <th className="px-4 py-4 text-center bg-red-600 bg-opacity-30">❌ F</th>
+                                        <th className="px-6 py-4">Frequência</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {stats.map((st, i) => (
+                                        <tr key={i} className={`border-t hover:bg-gray-50 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                                            <td className="px-6 py-4 font-semibold">{st.name}</td>
+                                            <td className="px-4 py-4 text-center text-lg">
+                                                {st.status === 'ativo' ? '✅' : st.status === 'transferido' ? '🔄' : '🕊️'}
+                                            </td>
+                                            <td className="px-4 py-4 text-center font-bold text-gray-700">{st.total}</td>
+                                            <td className="px-4 py-4 text-center text-green-700 font-bold text-lg">{st.present}</td>
+                                            <td className="px-4 py-4 text-center text-yellow-700 font-bold text-lg">{st.justified}</td>
+                                            <td className="px-4 py-4 text-center text-red-700 font-bold text-lg">{st.absent}</td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="flex-1 bg-gray-200 rounded-full h-6">
+                                                        <div className="h-full bg-gradient-to-r from-green-500 to-green-600 rounded-full transition-all" 
+                                                            style={{width: `${st.pct}%`}}></div>
+                                                    </div>
+                                                    <span className="font-bold text-lg w-16 text-right text-indigo-600">{st.pct}%</span>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
                 </div>
             );
         }
@@ -448,28 +621,29 @@
             
             const handleSave = () => {
                 localStorage.setItem('jsonbin_api_key', key);
-                alert('✅ API Key salva!');
+                alert('✅ API Key salva com sucesso!');
                 onClose();
             };
             
             return (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-lg p-6 w-full max-w-2xl">
-                        <h2 className="text-2xl font-bold mb-4">⚙️ Configuração</h2>
+                    <div className="bg-white rounded-xl p-6 w-full max-w-2xl shadow-2xl">
+                        <h2 className="text-2xl font-bold mb-4">⚙️ Configuração da Nuvem</h2>
                         <div className="mb-4">
                             <label className="block font-semibold mb-2">🔑 JSONBin API Key:</label>
                             <input value={key} onChange={(e) => setKey(e.target.value)}
-                                className="w-full px-4 py-2 border-2 rounded-lg" placeholder="Cole sua API Key aqui" />
+                                className="w-full px-4 py-3 border-2 rounded-lg focus:border-indigo-500 outline-none" 
+                                placeholder="Cole sua API Key aqui" />
                             <p className="text-sm text-gray-600 mt-2">
-                                🔗 Obtenha em: <a href="https://jsonbin.io" target="_blank" className="text-indigo-600 underline">jsonbin.io</a>
+                                🔗 Obtenha gratuitamente em: <a href="https://jsonbin.io" target="_blank" className="text-indigo-600 underline hover:text-indigo-800">jsonbin.io</a>
                             </p>
                         </div>
                         <div className="flex gap-3">
-                            <button onClick={handleSave} className="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-bold hover:bg-indigo-700">
+                            <button onClick={handleSave} className="flex-1 bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 transition">
                                 💾 Salvar
                             </button>
-                            <button onClick={onClose} className="px-6 bg-gray-200 py-2 rounded-lg font-bold hover:bg-gray-300">
-                                ❌
+                            <button onClick={onClose} className="px-8 bg-gray-200 py-3 rounded-lg font-bold hover:bg-gray-300 transition">
+                                ❌ Cancelar
                             </button>
                         </div>
                     </div>
@@ -477,67 +651,81 @@
             );
         }
         
-        function UsersModal({ users, onAdd, onDelete, onClose }) {
+        function UsersModal({ users, setUsers, onClose }) {
             const [login, setLogin] = useState('');
             const [name, setName] = useState('');
             const [password, setPassword] = useState('');
             const [role, setRole] = useState('editor');
             
             const handleAdd = () => {
-                if (!login.trim() || !name.trim() || !password.trim()) return alert('❌ Preencha todos os campos!');
-                onAdd(login, name, password, role);
+                if (!login.trim() || !name.trim() || !password.trim()) {
+                    return alert('❌ Preencha todos os campos!');
+                }
+                if (users[login]) {
+                    return alert('❌ Este login já existe!');
+                }
+                setUsers({ ...users, [login]: { name, password, role } });
+                alert('✅ Usuário criado com sucesso!');
                 setLogin('');
                 setName('');
                 setPassword('');
             };
             
+            const handleDelete = (login) => {
+                if (login === 'admin') return alert('❌ O usuário admin não pode ser excluído!');
+                if (confirm(`⚠️ Tem certeza que deseja excluir o usuário "${login}"?`)) {
+                    const { [login]: _, ...rest } = users;
+                    setUsers(rest);
+                }
+            };
+            
             return (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-lg p-6 w-full max-w-3xl max-h-[90vh] overflow-auto">
+                    <div className="bg-white rounded-xl p-6 w-full max-w-3xl max-h-[90vh] overflow-auto shadow-2xl">
                         <h2 className="text-2xl font-bold mb-4">👥 Gerenciar Usuários</h2>
                         
-                        <div className="bg-indigo-50 p-4 rounded-lg mb-4">
+                        <div className="bg-indigo-50 p-4 rounded-lg mb-4 border-2 border-indigo-200">
                             <h3 className="font-bold mb-3">➕ Criar Novo Usuário</h3>
                             <div className="grid grid-cols-2 gap-3">
                                 <input value={login} onChange={(e) => setLogin(e.target.value)}
-                                    placeholder="Login" className="px-4 py-2 border-2 rounded-lg" />
+                                    placeholder="Login" className="px-4 py-3 border-2 rounded-lg focus:border-indigo-500 outline-none" />
                                 <input value={name} onChange={(e) => setName(e.target.value)}
-                                    placeholder="Nome completo" className="px-4 py-2 border-2 rounded-lg" />
+                                    placeholder="Nome completo" className="px-4 py-3 border-2 rounded-lg focus:border-indigo-500 outline-none" />
                                 <input value={password} onChange={(e) => setPassword(e.target.value)}
-                                    type="password" placeholder="Senha" className="px-4 py-2 border-2 rounded-lg" />
+                                    type="password" placeholder="Senha" className="px-4 py-3 border-2 rounded-lg focus:border-indigo-500 outline-none" />
                                 <select value={role} onChange={(e) => setRole(e.target.value)}
-                                    className="px-4 py-2 border-2 rounded-lg">
+                                    className="px-4 py-3 border-2 rounded-lg focus:border-indigo-500 outline-none bg-white">
                                     <option value="admin">👑 Administrador</option>
                                     <option value="editor">📝 Alimentador</option>
                                     <option value="viewer">👁️ Observador</option>
                                 </select>
                             </div>
-                            <button onClick={handleAdd} className="w-full mt-3 bg-indigo-600 text-white py-2 rounded-lg font-bold hover:bg-indigo-700">
+                            <button onClick={handleAdd} className="w-full mt-3 bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 transition">
                                 ✅ Criar Usuário
                             </button>
                         </div>
                         
                         <div className="space-y-2">
-                            <h3 className="font-bold mb-2">📋 Usuários Cadastrados</h3>
+                            <h3 className="font-bold mb-2">📋 Usuários Cadastrados:</h3>
                             {Object.entries(users).map(([login, u]) => (
-                                <div key={login} className="flex items-center gap-3 p-3 border rounded-lg">
+                                <div key={login} className="flex items-center gap-3 p-4 border-2 rounded-lg bg-white hover:bg-gray-50 transition">
                                     <div className="flex-1">
-                                        <p className="font-bold">{u.name}</p>
+                                        <p className="font-bold text-lg">{u.name}</p>
                                         <p className="text-sm text-gray-600">
                                             🔑 {login} | {u.role === 'admin' ? '👑 Admin' : u.role === 'editor' ? '📝 Alimentador' : '👁️ Observador'}
                                         </p>
                                     </div>
                                     {login !== 'admin' && (
-                                        <button onClick={() => onDelete(login)} 
-                                            className="text-red-600 px-3 py-1 hover:bg-red-50 rounded">
-                                            🗑️
+                                        <button onClick={() => handleDelete(login)} 
+                                            className="text-red-600 px-4 py-2 hover:bg-red-50 rounded-lg font-semibold transition">
+                                            🗑️ Excluir
                                         </button>
                                     )}
                                 </div>
                             ))}
                         </div>
                         
-                        <button onClick={onClose} className="w-full mt-4 bg-gray-200 py-2 rounded-lg font-bold hover:bg-gray-300">
+                        <button onClick={onClose} className="w-full mt-4 bg-gray-200 py-3 rounded-lg font-bold hover:bg-gray-300 transition">
                             ❌ Fechar
                         </button>
                     </div>
@@ -545,29 +733,156 @@
             );
         }
         
-        function ClassModal({ onAdd, onClose }) {
+        function ClassesModal({ classes, setClasses, onClose }) {
             const [name, setName] = useState('');
             
             const handleAdd = () => {
                 if (!name.trim()) return alert('❌ Digite o nome da turma!');
-                onAdd(name);
-                onClose();
+                const id = Date.now();
+                setClasses([...classes, { id, name, students: [] }]);
+                alert('✅ Turma criada com sucesso!');
+                setName('');
+            };
+            
+            const handleDelete = (id) => {
+                const cls = classes.find(c => c.id === id);
+                if (confirm(`⚠️ Excluir a turma "${cls.name}"? Todos os dados serão perdidos!`)) {
+                    setClasses(classes.filter(c => c.id !== id));
+                }
             };
             
             return (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-lg p-6 w-full max-w-md">
-                        <h2 className="text-2xl font-bold mb-4">🏫 Nova Turma</h2>
-                        <input value={name} onChange={(e) => setName(e.target.value)}
-                            placeholder="Nome da turma" className="w-full px-4 py-2 border-2 rounded-lg mb-4" />
-                        <div className="flex gap-3">
-                            <button onClick={handleAdd} className="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-bold hover:bg-indigo-700">
-                                ✅ Criar
-                            </button>
-                            <button onClick={onClose} className="px-6 bg-gray-200 py-2 rounded-lg font-bold hover:bg-gray-300">
-                                ❌
-                            </button>
+                    <div className="bg-white rounded-xl p-6 w-full max-w-2xl shadow-2xl">
+                        <h2 className="text-2xl font-bold mb-4">🏫 Gerenciar Turmas</h2>
+                        
+                        <div className="bg-green-50 p-4 rounded-lg mb-4 border-2 border-green-200">
+                            <h3 className="font-bold mb-3">➕ Criar Nova Turma</h3>
+                            <div className="flex gap-2">
+                                <input value={name} onChange={(e) => setName(e.target.value)}
+                                    placeholder="Nome da turma (ex: 5º Ano A)" 
+                                    className="flex-1 px-4 py-3 border-2 rounded-lg focus:border-green-500 outline-none"
+                                    onKeyPress={(e) => e.key === 'Enter' && handleAdd()} />
+                                <button onClick={handleAdd} className="bg-green-600 text-white px-8 py-3 rounded-lg font-bold hover:bg-green-700 transition">
+                                    ✅ Criar
+                                </button>
+                            </div>
                         </div>
+                        
+                        <div className="space-y-2">
+                            <h3 className="font-bold mb-2">📋 Turmas Cadastradas:</h3>
+                            {classes.length === 0 ? (
+                                <p className="text-gray-500 text-center py-4">Nenhuma turma cadastrada</p>
+                            ) : (
+                                classes.map(c => (
+                                    <div key={c.id} className="flex items-center gap-3 p-4 border-2 rounded-lg bg-white hover:bg-gray-50 transition">
+                                        <div className="flex-1">
+                                            <p className="font-bold text-lg">{c.name}</p>
+                                            <p className="text-sm text-gray-600">{c.students.length} aluno(s)</p>
+                                        </div>
+                                        <button onClick={() => handleDelete(c.id)} 
+                                            className="text-red-600 px-4 py-2 hover:bg-red-50 rounded-lg font-semibold transition">
+                                            🗑️ Excluir
+                                        </button>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                        
+                        <button onClick={onClose} className="w-full mt-4 bg-gray-200 py-3 rounded-lg font-bold hover:bg-gray-300 transition">
+                            ❌ Fechar
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+        
+        function StudentsModal({ class: cls, classes, setClasses, onClose }) {
+            const [name, setName] = useState('');
+            
+            const handleAdd = () => {
+                if (!name.trim()) return alert('❌ Digite o nome do aluno!');
+                const newStudent = {
+                    id: Date.now(),
+                    name: name.trim(),
+                    status: 'ativo',
+                    observations: {}
+                };
+                setClasses(classes.map(c => 
+                    c.id === cls.id 
+                        ? { ...c, students: [...c.students, newStudent] }
+                        : c
+                ));
+                alert('✅ Aluno adicionado com sucesso!');
+                setName('');
+            };
+            
+            const handleStatusChange = (studentId, newStatus) => {
+                setClasses(classes.map(c =>
+                    c.id === cls.id
+                        ? { ...c, students: c.students.map(s => 
+                            s.id === studentId ? { ...s, status: newStatus } : s
+                        )}
+                        : c
+                ));
+            };
+            
+            const handleDelete = (studentId) => {
+                const student = cls.students.find(s => s.id === studentId);
+                if (confirm(`⚠️ Excluir o aluno "${student.name}"? Todos os registros serão perdidos!`)) {
+                    setClasses(classes.map(c =>
+                        c.id === cls.id
+                            ? { ...c, students: c.students.filter(s => s.id !== studentId) }
+                            : c
+                    ));
+                }
+            };
+            
+            return (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl p-6 w-full max-w-3xl max-h-[90vh] overflow-auto shadow-2xl">
+                        <h2 className="text-2xl font-bold mb-4">👨‍🎓 Gerenciar Alunos - {cls.name}</h2>
+                        
+                        <div className="bg-blue-50 p-4 rounded-lg mb-4 border-2 border-blue-200">
+                            <h3 className="font-bold mb-3">➕ Adicionar Novo Aluno</h3>
+                            <div className="flex gap-2">
+                                <input value={name} onChange={(e) => setName(e.target.value)}
+                                    placeholder="Nome completo do aluno" 
+                                    className="flex-1 px-4 py-3 border-2 rounded-lg focus:border-blue-500 outline-none" 
+                                    onKeyPress={(e) => e.key === 'Enter' && handleAdd()} />
+                                <button onClick={handleAdd} className="bg-blue-600 text-white px-8 py-3 rounded-lg font-bold hover:bg-blue-700 transition">
+                                    ✅ Adicionar
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div className="space-y-2">
+                            <h3 className="font-bold mb-2">📋 Alunos da Turma ({cls.students.length}):</h3>
+                            {cls.students.length === 0 ? (
+                                <p className="text-gray-500 text-center py-4">Nenhum aluno cadastrado</p>
+                            ) : (
+                                cls.students.map(s => (
+                                    <div key={s.id} className="flex items-center gap-3 p-4 border-2 rounded-lg bg-white hover:bg-gray-50 transition">
+                                        <span className="flex-1 font-bold text-lg">{s.name}</span>
+                                        <select value={s.status} 
+                                            onChange={(e) => handleStatusChange(s.id, e.target.value)}
+                                            className="px-4 py-2 border-2 rounded-lg focus:border-indigo-500 outline-none bg-white">
+                                            <option value="ativo">✅ Ativo</option>
+                                            <option value="transferido">🔄 Transferido</option>
+                                            <option value="falecido">🕊️ Falecido</option>
+                                        </select>
+                                        <button onClick={() => handleDelete(s.id)} 
+                                            className="text-red-600 px-4 py-2 hover:bg-red-50 rounded-lg font-semibold transition">
+                                            🗑️ Excluir
+                                        </button>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                        
+                        <button onClick={onClose} className="w-full mt-4 bg-gray-200 py-3 rounded-lg font-bold hover:bg-gray-300 transition">
+                            ❌ Fechar
+                        </button>
                     </div>
                 </div>
             );
