@@ -27,6 +27,12 @@
         const ATTENDANCE_STATUS = { PRESENTE: 'presente', FALTA: 'falta', JUSTIFICADA: 'justificada' };
         const API_URL = 'https://api.jsonbin.io/v3';
         
+        // CONFIGURAÇÃO CENTRAL - Edite aqui sua chave da API e BIN ID
+        const SHARED_CONFIG = {
+            apiKey: '$2a$10$LVhD8Cj/YDHnZ.LAXI5.Le3VqZCMWJ0BXMs8konXq0FsxfdfRarOe', // Cole sua chave da API aqui (só precisa configurar UMA VEZ)
+            binId: '698dac12d0ea881f40b4991f'   // Cole seu BIN ID aqui (gerado automaticamente na primeira sincronização)
+        };
+        
         // Toast notification component
         function Toast({ message, type = 'success', onClose }) {
             useEffect(() => {
@@ -46,7 +52,13 @@
         }
         
         class CloudSync {
-            static getKey() { return localStorage.getItem('jsonbin_api_key') || ''; }
+            static getKey() { 
+                return SHARED_CONFIG.apiKey || localStorage.getItem('jsonbin_api_key') || ''; 
+            }
+            
+            static getBinId() {
+                return SHARED_CONFIG.binId || localStorage.getItem('syncBinId') || '';
+            }
             
             static async checkConnection() {
                 try {
@@ -68,7 +80,7 @@
                 if (!isOnline) return { success: false, error: 'Sem conexão com a internet' };
                 
                 try {
-                    const binId = localStorage.getItem('syncBinId');
+                    const binId = this.getBinId();
                     const url = binId ? `${API_URL}/b/${binId}` : `${API_URL}/b`;
                     const res = await fetch(url, {
                         method: binId ? 'PUT' : 'POST',
@@ -77,8 +89,12 @@
                     });
                     if (!res.ok) throw new Error('Erro na sincronização');
                     const result = await res.json();
-                    if (result.metadata?.id) localStorage.setItem('syncBinId', result.metadata.id);
-                    return { success: true };
+                    if (result.metadata?.id && !SHARED_CONFIG.binId) {
+                        localStorage.setItem('syncBinId', result.metadata.id);
+                        console.log('🔑 IMPORTANTE: Adicione este BIN ID no código:');
+                        console.log('binId: "' + result.metadata.id + '"');
+                    }
+                    return { success: true, binId: result.metadata?.id };
                 } catch (error) { 
                     return { success: false, error: error.message }; 
                 }
@@ -86,7 +102,7 @@
             
             static async load() {
                 const key = this.getKey();
-                const binId = localStorage.getItem('syncBinId');
+                const binId = this.getBinId();
                 if (!key || !binId) return null;
                 
                 const isOnline = await this.checkConnection();
@@ -185,7 +201,12 @@
                 
                 if (result.success) {
                     setLastSync(new Date().toISOString());
-                    showToast('Dados sincronizados com sucesso!', 'success');
+                    if (result.binId && !SHARED_CONFIG.binId) {
+                        showToast('✅ Sincronizado! IMPORTANTE: Veja o console para o BIN ID', 'success');
+                        alert(`🔑 IMPORTANTE!\n\nSeu BIN ID foi gerado:\n${result.binId}\n\n1. Abra o arquivo HTML em um editor\n2. Encontre SHARED_CONFIG\n3. Cole este ID em binId: '${result.binId}'\n4. Salve e compartilhe o arquivo!\n\nAssim todos acessarão os mesmos dados!`);
+                    } else {
+                        showToast('Dados sincronizados com sucesso!', 'success');
+                    }
                 } else {
                     showToast(`Erro na sincronização: ${result.error}`, 'error');
                 }
@@ -716,11 +737,16 @@
         
         function ConfigModal({ onClose, showToast }) {
             const [apiKey, setApiKey] = useState(CloudSync.getKey());
+            const [binId, setBinId] = useState(CloudSync.getBinId());
+            const [showAdvanced, setShowAdvanced] = useState(false);
             
             const handleSave = () => {
                 if (apiKey.trim()) {
                     localStorage.setItem('jsonbin_api_key', apiKey.trim());
-                    showToast('Chave da API salva com sucesso!', 'success');
+                    if (binId.trim()) {
+                        localStorage.setItem('syncBinId', binId.trim());
+                    }
+                    showToast('Configuração salva com sucesso!', 'success');
                     onClose();
                 } else {
                     showToast('Digite uma chave válida!', 'error');
@@ -729,34 +755,76 @@
             
             return (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-xl p-6 w-full max-w-2xl shadow-2xl">
+                    <div className="bg-white rounded-xl p-6 w-full max-w-3xl max-h-[90vh] overflow-auto shadow-2xl">
                         <h2 className="text-2xl font-bold mb-4">⚙️ Configurações de Sincronização</h2>
                         
-                        <div className="bg-blue-50 p-4 rounded-lg mb-4 border-2 border-blue-200">
-                            <h3 className="font-bold mb-2">📡 Como configurar a sincronização:</h3>
-                            <ol className="list-decimal list-inside space-y-1 text-sm">
-                                <li>Acesse <a href="https://jsonbin.io" target="_blank" className="text-blue-600 underline">jsonbin.io</a></li>
-                                <li>Crie uma conta gratuita</li>
-                                <li>Copie sua API Key (chave de API)</li>
-                                <li>Cole a chave no campo abaixo</li>
-                            </ol>
+                        <div className="bg-gradient-to-r from-green-50 to-blue-50 p-6 rounded-lg mb-4 border-2 border-green-200">
+                            <h3 className="font-bold mb-3 text-lg">🎯 CONFIGURAÇÃO COMPARTILHADA (RECOMENDADO)</h3>
+                            <div className="bg-white p-4 rounded-lg mb-3 border-2 border-blue-300">
+                                <p className="font-bold text-blue-700 mb-2">✅ Para que TODOS acessem com o mesmo link:</p>
+                                <ol className="list-decimal list-inside space-y-2 text-sm">
+                                    <li>Abra o arquivo HTML em um editor de texto</li>
+                                    <li>Procure por <code className="bg-gray-200 px-2 py-1 rounded">SHARED_CONFIG</code></li>
+                                    <li>Cole sua API Key em <code className="bg-gray-200 px-2 py-1 rounded">apiKey: ''</code></li>
+                                    <li>Após a primeira sincronização, o BIN ID aparecerá no console do navegador</li>
+                                    <li>Copie o BIN ID e cole em <code className="bg-gray-200 px-2 py-1 rounded">binId: ''</code></li>
+                                    <li>Salve o arquivo e compartilhe com sua equipe!</li>
+                                </ol>
+                                <div className="mt-3 p-3 bg-yellow-100 rounded border border-yellow-300">
+                                    <p className="text-sm"><strong>💡 Vantagem:</strong> Todos acessam os mesmos dados sem precisar configurar nada! Basta abrir o link.</p>
+                                </div>
+                            </div>
                         </div>
                         
-                        <div className="mb-4">
-                            <label className="block text-sm font-bold text-gray-700 mb-2">🔑 Chave da API (JSONBin):</label>
-                            <input type="text" value={apiKey} onChange={(e) => setApiKey(e.target.value)}
-                                placeholder="Cole sua chave da API aqui..."
-                                className="w-full px-4 py-3 border-2 rounded-lg focus:border-indigo-500 outline-none font-mono text-sm" />
-                        </div>
+                        <button 
+                            onClick={() => setShowAdvanced(!showAdvanced)}
+                            className="w-full mb-4 bg-gray-200 py-2 rounded-lg font-bold hover:bg-gray-300 transition">
+                            {showAdvanced ? '▼' : '▶'} Configuração Individual (Avançado)
+                        </button>
                         
-                        <div className="flex gap-2">
-                            <button onClick={handleSave} className="flex-1 bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 transition">
-                                ✅ Salvar
+                        {showAdvanced && (
+                            <>
+                                <div className="bg-blue-50 p-4 rounded-lg mb-4 border-2 border-blue-200">
+                                    <h3 className="font-bold mb-2">📡 Configuração Local (apenas este dispositivo)</h3>
+                                    <ol className="list-decimal list-inside space-y-1 text-sm mb-3">
+                                        <li>Acesse <a href="https://jsonbin.io" target="_blank" className="text-blue-600 underline">jsonbin.io</a></li>
+                                        <li>Crie uma conta gratuita</li>
+                                        <li>Copie sua API Key</li>
+                                        <li>Cole abaixo</li>
+                                    </ol>
+                                </div>
+                                
+                                <div className="mb-4">
+                                    <label className="block text-sm font-bold text-gray-700 mb-2">🔑 Chave da API (JSONBin):</label>
+                                    <input type="text" value={apiKey} onChange={(e) => setApiKey(e.target.value)}
+                                        placeholder="Cole sua chave da API aqui..."
+                                        className="w-full px-4 py-3 border-2 rounded-lg focus:border-indigo-500 outline-none font-mono text-sm" />
+                                </div>
+                                
+                                <div className="mb-4">
+                                    <label className="block text-sm font-bold text-gray-700 mb-2">🆔 BIN ID (opcional):</label>
+                                    <input type="text" value={binId} onChange={(e) => setBinId(e.target.value)}
+                                        placeholder="Cole o BIN ID para conectar a um banco existente..."
+                                        className="w-full px-4 py-3 border-2 rounded-lg focus:border-indigo-500 outline-none font-mono text-sm" />
+                                    <p className="text-xs text-gray-500 mt-1">Deixe vazio para criar um novo banco de dados</p>
+                                </div>
+                                
+                                <div className="flex gap-2">
+                                    <button onClick={handleSave} className="flex-1 bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 transition">
+                                        ✅ Salvar
+                                    </button>
+                                    <button onClick={onClose} className="flex-1 bg-gray-200 py-3 rounded-lg font-bold hover:bg-gray-300 transition">
+                                        ❌ Cancelar
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                        
+                        {!showAdvanced && (
+                            <button onClick={onClose} className="w-full bg-gray-200 py-3 rounded-lg font-bold hover:bg-gray-300 transition">
+                                ❌ Fechar
                             </button>
-                            <button onClick={onClose} className="flex-1 bg-gray-200 py-3 rounded-lg font-bold hover:bg-gray-300 transition">
-                                ❌ Cancelar
-                            </button>
-                        </div>
+                        )}
                     </div>
                 </div>
             );
