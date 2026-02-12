@@ -155,6 +155,16 @@
                 }
             };
             
+            // Sincroniza sempre que houver mudanças nos usuários ou turmas
+            useEffect(() => {
+                if (user && CloudSync.getKey()) {
+                    const syncTimer = setTimeout(() => {
+                        autoSync();
+                    }, 2000); // Sincroniza 2 segundos após mudança
+                    return () => clearTimeout(syncTimer);
+                }
+            }, [users, classes]);
+            
             const manualSync = async () => {
                 setSyncing(true);
                 await checkOnlineStatus();
@@ -189,29 +199,69 @@
                 const login = fd.get('login');
                 const pass = fd.get('password');
                 
-                // Verifica conexão apenas se há chave da API configurada
+                // Verifica conexão
+                await checkOnlineStatus();
+                
+                // Se tem chave da API, SEMPRE tenta carregar dados da nuvem primeiro
                 if (CloudSync.getKey()) {
-                    await checkOnlineStatus();
                     if (!isOnline) {
-                        showToast('Sem conexão com a internet! Só é possível fazer login online.', 'error');
+                        showToast('Sem conexão com a internet! É necessário estar online para fazer login.', 'error');
                         return;
                     }
                     
-                    // Tenta carregar dados atualizados da nuvem
-                    await loadData();
-                }
-                
-                const u = users[login];
-                if (u && u.password === pass) {
-                    setUser({ 
-                        login, 
-                        ...u, 
-                        canEdit: u.role === 'admin' || u.role === 'editor',
-                        canManage: u.role === 'admin'
-                    });
-                    showToast(`Bem-vindo, ${u.name}!`, 'success');
+                    // Carrega dados atualizados da nuvem ANTES de verificar login
+                    const cloudData = await CloudSync.load();
+                    if (cloudData) {
+                        // Atualiza os usuários com os dados da nuvem
+                        const cloudUsers = cloudData.users || DEFAULT_USERS;
+                        
+                        // Verifica login com os dados da nuvem
+                        const u = cloudUsers[login];
+                        if (u && u.password === pass) {
+                            // Atualiza o estado com todos os dados da nuvem
+                            setUsers(cloudUsers);
+                            setClasses(cloudData.classes || []);
+                            setLastSync(cloudData.lastSync);
+                            
+                            setUser({ 
+                                login, 
+                                ...u, 
+                                canEdit: u.role === 'admin' || u.role === 'editor',
+                                canManage: u.role === 'admin'
+                            });
+                            showToast(`Bem-vindo, ${u.name}!`, 'success');
+                        } else {
+                            showToast('Login ou senha incorretos!', 'error');
+                        }
+                    } else {
+                        // Se não conseguiu carregar da nuvem, tenta com dados locais
+                        const u = users[login];
+                        if (u && u.password === pass) {
+                            setUser({ 
+                                login, 
+                                ...u, 
+                                canEdit: u.role === 'admin' || u.role === 'editor',
+                                canManage: u.role === 'admin'
+                            });
+                            showToast(`Bem-vindo, ${u.name}!`, 'success');
+                        } else {
+                            showToast('Não foi possível carregar os dados da nuvem. Verifique sua chave da API.', 'error');
+                        }
+                    }
                 } else {
-                    showToast('Login ou senha incorretos!', 'error');
+                    // Sem chave da API, usa apenas dados locais
+                    const u = users[login];
+                    if (u && u.password === pass) {
+                        setUser({ 
+                            login, 
+                            ...u, 
+                            canEdit: u.role === 'admin' || u.role === 'editor',
+                            canManage: u.role === 'admin'
+                        });
+                        showToast(`Bem-vindo, ${u.name}!`, 'success');
+                    } else {
+                        showToast('Login ou senha incorretos!', 'error');
+                    }
                 }
             };
             
@@ -732,11 +782,21 @@
                 }
                 
                 setUsers({ ...users, [login]: { password, name, role } });
-                showToast(`Usuário ${name} criado com sucesso!`, 'success');
+                showToast(`Usuário ${name} criado! Aguarde a sincronização...`, 'success');
                 setLogin('');
                 setPassword('');
                 setName('');
                 setRole('viewer');
+                
+                // Força sincronização imediata
+                setTimeout(async () => {
+                    if (CloudSync.getKey()) {
+                        const result = await CloudSync.save({ classes, users: { ...users, [login]: { password, name, role } } });
+                        if (result.success) {
+                            showToast('Usuário sincronizado com a nuvem!', 'success');
+                        }
+                    }
+                }, 500);
             };
             
             const handleChangePassword = (userLogin) => {
@@ -745,13 +805,25 @@
                     return;
                 }
                 
-                setUsers({
+                const updatedUsers = {
                     ...users,
                     [userLogin]: { ...users[userLogin], password: newPassword.trim() }
-                });
-                showToast(`Senha de ${users[userLogin].name} alterada com sucesso!`, 'success');
+                };
+                
+                setUsers(updatedUsers);
+                showToast(`Senha de ${users[userLogin].name} alterada! Aguarde a sincronização...`, 'success');
                 setEditingUser(null);
                 setNewPassword('');
+                
+                // Força sincronização imediata
+                setTimeout(async () => {
+                    if (CloudSync.getKey()) {
+                        const result = await CloudSync.save({ classes, users: updatedUsers });
+                        if (result.success) {
+                            showToast('Senha sincronizada com a nuvem!', 'success');
+                        }
+                    }
+                }, 500);
             };
             
             const handleDelete = (userLogin) => {
