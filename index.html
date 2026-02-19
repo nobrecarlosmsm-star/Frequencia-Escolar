@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
-<head>A
+<head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Frequência Escolar</title>
@@ -8,7 +8,7 @@
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <!-- jsPDF para geração de PDF -->
+    <!-- ADICIONADO: Bibliotecas para PDF -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
     <style>
@@ -30,10 +30,10 @@
         const ATTENDANCE_STATUS = { PRESENTE: 'presente', FALTA: 'falta', JUSTIFICADA: 'justificada' };
         const API_URL = 'https://api.jsonbin.io/v3';
         
-        // CONFIGURAÇÃO CENTRAL - Edite aqui sua chave da API e BIN ID
+        // SUAS CHAVES CONFIGURADAS
         const SHARED_CONFIG = {
-            apiKey: '$2a$10$LVhD8Cj/YDHnZ.LAXI5.Le3VqZCMWJ0BXMs8konXq0FsxfdfRarOe', // Cole sua chave da API aqui (só precisa configurar UMA VEZ)
-            binId: '698dac12d0ea881f40b4991f'   // Cole seu BIN ID aqui (gerado automaticamente na primeira sincronização)
+            apiKey: '$2a$10$LVhD8Cj/YDHnZ.LAXI5.Le3VqZCMWJ0BXMs8konXq0FsxfdfRarOe',
+            binId: '698dac12d0ea881f40b4991f'
         };
         
         // Toast notification component
@@ -179,7 +179,7 @@
                 if (user && CloudSync.getKey()) {
                     const syncTimer = setTimeout(() => {
                         autoSync();
-                    }, 2000); // Sincroniza 2 segundos após mudança
+                    }, 2000);
                     return () => clearTimeout(syncTimer);
                 }
             }, [users, classes]);
@@ -223,26 +223,19 @@
                 const login = fd.get('login');
                 const pass = fd.get('password');
                 
-                // Verifica conexão
                 await checkOnlineStatus();
                 
-                // Se tem chave da API, SEMPRE tenta carregar dados da nuvem primeiro
                 if (CloudSync.getKey()) {
                     if (!isOnline) {
                         showToast('Sem conexão com a internet! É necessário estar online para fazer login.', 'error');
                         return;
                     }
                     
-                    // Carrega dados atualizados da nuvem ANTES de verificar login
                     const cloudData = await CloudSync.load();
                     if (cloudData) {
-                        // Atualiza os usuários com os dados da nuvem
                         const cloudUsers = cloudData.users || DEFAULT_USERS;
-                        
-                        // Verifica login com os dados da nuvem
                         const u = cloudUsers[login];
                         if (u && u.password === pass) {
-                            // Atualiza o estado com todos os dados da nuvem
                             setUsers(cloudUsers);
                             setClasses(cloudData.classes || []);
                             setLastSync(cloudData.lastSync);
@@ -258,7 +251,6 @@
                             showToast('Login ou senha incorretos!', 'error');
                         }
                     } else {
-                        // Se não conseguiu carregar da nuvem, tenta com dados locais
                         const u = users[login];
                         if (u && u.password === pass) {
                             setUser({ 
@@ -273,7 +265,6 @@
                         }
                     }
                 } else {
-                    // Sem chave da API, usa apenas dados locais
                     const u = users[login];
                     if (u && u.password === pass) {
                         setUser({ 
@@ -642,7 +633,7 @@
             
             const report = generateReport();
             
-            // Função para gerar PDF Individual
+            // FUNÇÕES PDF - COMPLETAS
             const generateIndividualPDF = () => {
                 if (!selectedStudent || !report) return;
                 
@@ -652,23 +643,19 @@
                 const { jsPDF } = window.jspdf;
                 const doc = new jsPDF();
                 
-                // Título
                 doc.setFontSize(20);
                 doc.setFont(undefined, 'bold');
                 doc.text('Relatório Individual de Frequência', 105, 20, { align: 'center' });
                 
-                // Info da turma
                 doc.setFontSize(12);
                 doc.setFont(undefined, 'normal');
                 doc.text(`Turma: ${cls.name}`, 20, 35);
                 doc.text(`Período: ${new Date(startDate + 'T00:00:00').toLocaleDateString('pt-BR')} a ${new Date(endDate + 'T00:00:00').toLocaleDateString('pt-BR')}`, 20, 42);
                 
-                // Nome do aluno
                 doc.setFontSize(16);
                 doc.setFont(undefined, 'bold');
                 doc.text(`Aluno: ${studentData.student.name}`, 20, 55);
                 
-                // Estatísticas
                 doc.setFontSize(12);
                 doc.setFont(undefined, 'normal');
                 doc.text(`Presenças: ${studentData.presente}`, 20, 70);
@@ -677,7 +664,6 @@
                 doc.text(`Total de Aulas: ${studentData.total}`, 20, 91);
                 doc.text(`Percentual de Presença: ${studentData.percentage}%`, 20, 98);
                 
-                // Status
                 const status = parseFloat(studentData.percentage) >= 75 ? 'APROVADO' : 'REPROVADO por falta';
                 doc.setFontSize(14);
                 doc.setFont(undefined, 'bold');
@@ -688,25 +674,21 @@
                 setShowStudentModal(false);
             };
             
-            // Função para gerar PDF da Turma Completa
             const generateClassPDF = () => {
                 if (!report) return;
                 
                 const { jsPDF } = window.jspdf;
                 const doc = new jsPDF();
                 
-                // Título
                 doc.setFontSize(18);
                 doc.setFont(undefined, 'bold');
                 doc.text('Relatório de Frequência da Turma', 105, 15, { align: 'center' });
                 
-                // Info
                 doc.setFontSize(11);
                 doc.setFont(undefined, 'normal');
                 doc.text(`Turma: ${cls.name}`, 105, 23, { align: 'center' });
                 doc.text(`Período: ${new Date(startDate + 'T00:00:00').toLocaleDateString('pt-BR')} a ${new Date(endDate + 'T00:00:00').toLocaleDateString('pt-BR')}`, 105, 29, { align: 'center' });
                 
-                // Tabela
                 const tableData = report.map((r, idx) => [
                     idx + 1,
                     r.student.name,
@@ -735,7 +717,6 @@
                     }
                 });
                 
-                // Totais
                 const finalY = doc.lastAutoTable.finalY + 10;
                 doc.setFontSize(10);
                 doc.text(`Total de Presenças: ${report.reduce((sum, r) => sum + r.presente, 0)}`, 20, finalY);
@@ -746,14 +727,12 @@
                 showToast('PDF da Turma gerado com sucesso!', 'success');
             };
             
-            // Função para gerar PDF por Período
             const generatePeriodPDF = () => {
                 if (!report) return;
                 
                 const { jsPDF } = window.jspdf;
                 const doc = new jsPDF();
                 
-                // Calcular estatísticas por semana/mês
                 const start = new Date(startDate + 'T00:00:00');
                 const end = new Date(endDate + 'T00:00:00');
                 const diffDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
@@ -767,7 +746,6 @@
                 doc.text(`Turma: ${cls.name}`, 105, 23, { align: 'center' });
                 doc.text(`Período: ${diffDays + 1} dias (${new Date(startDate + 'T00:00:00').toLocaleDateString('pt-BR')} a ${new Date(endDate + 'T00:00:00').toLocaleDateString('pt-BR')})`, 105, 29, { align: 'center' });
                 
-                // Estatísticas gerais
                 const totalPresencas = report.reduce((sum, r) => sum + r.presente, 0);
                 const totalFaltas = report.reduce((sum, r) => sum + r.falta, 0);
                 const totalJustificadas = report.reduce((sum, r) => sum + r.justificada, 0);
@@ -786,7 +764,6 @@
                 doc.text(`Média de Presença da Turma: ${mediaPresenca}%`, 20, 76);
                 doc.text(`Número de Alunos Ativos: ${report.length}`, 20, 83);
                 
-                // Tabela resumida
                 const tableData = report.map((r, idx) => [
                     idx + 1,
                     r.student.name,
@@ -813,7 +790,6 @@
                 showToast('PDF por Período gerado com sucesso!', 'success');
             };
             
-            // Função para gerar PDF com Gráficos
             const generateGraphPDF = () => {
                 if (!report) return;
                 
@@ -829,12 +805,10 @@
                 doc.text(`Turma: ${cls.name}`, 105, 23, { align: 'center' });
                 doc.text(`Período: ${new Date(startDate + 'T00:00:00').toLocaleDateString('pt-BR')} a ${new Date(endDate + 'T00:00:00').toLocaleDateString('pt-BR')}`, 105, 29, { align: 'center' });
                 
-                // Estatísticas gerais
                 const totalPresencas = report.reduce((sum, r) => sum + r.presente, 0);
                 const totalFaltas = report.reduce((sum, r) => sum + r.falta, 0);
                 const totalJustificadas = report.reduce((sum, r) => sum + r.justificada, 0);
                 
-                // Gráfico de pizza simulado (texto)
                 doc.setFontSize(14);
                 doc.setFont(undefined, 'bold');
                 doc.text('Distribuição Geral:', 20, 45);
@@ -855,7 +829,6 @@
                 
                 doc.setTextColor(0, 0, 0);
                 
-                // Ranking de frequência
                 doc.setFontSize(14);
                 doc.setFont(undefined, 'bold');
                 doc.text('Ranking de Frequência:', 20, 85);
@@ -870,7 +843,6 @@
                     doc.text(`${idx + 1}. ${r.student.name}: ${r.percentage}% ${medal}`, 20, 95 + (idx * 7));
                 });
                 
-                // Alunos em risco
                 const emRisco = report.filter(r => parseFloat(r.percentage) < 75);
                 if (emRisco.length > 0) {
                     doc.setFontSize(14);
@@ -891,7 +863,6 @@
                 showToast('PDF com Gráficos gerado com sucesso!', 'success');
             };
             
-            // Função para gerar Folha de Presença
             const generateAttendanceSheet = () => {
                 if (!cls) return;
                 
@@ -908,7 +879,6 @@
                 doc.text(`Data: ___/___/_____`, 20, 32);
                 doc.text(`Professor: _________________________________`, 20, 39);
                 
-                // Lista de alunos
                 const activeStudents = cls.students.filter(s => s.status === 'ativo');
                 const tableData = activeStudents.map((s, idx) => [
                     idx + 1,
@@ -932,7 +902,6 @@
                     }
                 });
                 
-                // Rodapé
                 const finalY = doc.lastAutoTable.finalY + 15;
                 doc.setFontSize(9);
                 doc.text('Assinatura do Professor: _________________________________', 20, finalY);
@@ -976,13 +945,12 @@
                             </div>
                         </div>
                         
-                        {/* BOTÕES DE PDF - Aparecem SOMENTE quando uma turma é selecionada */}
+                        {/* BOTÕES PDF - SÓ APARECEM QUANDO SELECIONA TURMA */}
                         {report && (
                             <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-6 rounded-xl border-2 border-purple-200 mb-4 mt-4">
                                 <h3 className="text-xl font-bold mb-4 text-purple-800">📄 Exportar para PDF</h3>
                                 
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                    {/* Botão 1 - Individual */}
                                     <button onClick={() => setShowStudentModal(true)} className="bg-blue-600 text-white px-6 py-4 rounded-lg font-bold hover:bg-blue-700 transition shadow-lg flex items-center justify-center gap-2">
                                         <span className="text-2xl">👤</span>
                                         <div className="text-left">
@@ -991,7 +959,6 @@
                                         </div>
                                     </button>
 
-                                    {/* Botão 2 - Turma Completa */}
                                     <button onClick={generateClassPDF} className="bg-green-600 text-white px-6 py-4 rounded-lg font-bold hover:bg-green-700 transition shadow-lg flex items-center justify-center gap-2">
                                         <span className="text-2xl">👥</span>
                                         <div className="text-left">
@@ -1000,7 +967,6 @@
                                         </div>
                                     </button>
 
-                                    {/* Botão 3 - Por Período */}
                                     <button onClick={generatePeriodPDF} className="bg-orange-600 text-white px-6 py-4 rounded-lg font-bold hover:bg-orange-700 transition shadow-lg flex items-center justify-center gap-2">
                                         <span className="text-2xl">📅</span>
                                         <div className="text-left">
@@ -1009,7 +975,6 @@
                                         </div>
                                     </button>
 
-                                    {/* Botão 4 - Com Gráficos */}
                                     <button onClick={generateGraphPDF} className="bg-purple-600 text-white px-6 py-4 rounded-lg font-bold hover:bg-purple-700 transition shadow-lg flex items-center justify-center gap-2">
                                         <span className="text-2xl">📊</span>
                                         <div className="text-left">
@@ -1018,7 +983,6 @@
                                         </div>
                                     </button>
 
-                                    {/* Botão 5 - Folha de Presença */}
                                     <button onClick={generateAttendanceSheet} className="bg-teal-600 text-white px-6 py-4 rounded-lg font-bold hover:bg-teal-700 transition shadow-lg flex items-center justify-center gap-2">
                                         <span className="text-2xl">📋</span>
                                         <div className="text-left">
@@ -1027,7 +991,6 @@
                                         </div>
                                     </button>
 
-                                    {/* Botão 6 - Imprimir */}
                                     <button onClick={handlePrint} className="bg-indigo-600 text-white px-6 py-4 rounded-lg font-bold hover:bg-indigo-700 transition shadow-lg flex items-center justify-center gap-2">
                                         <span className="text-2xl">🖨️</span>
                                         <div className="text-left">
@@ -1040,7 +1003,7 @@
                         )}
                     </div>
                     
-                    {/* Modal de seleção de aluno para relatório individual */}
+                    {/* Modal de seleção de aluno */}
                     {showStudentModal && report && (
                         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
                             <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-2xl">
@@ -1122,6 +1085,9 @@
                 </div>
             );
         }
+        
+        // COMPONENTES RESTANTES (SEM ALTERAÇÃO)
+        {/* Continua com ConfigModal, UsersModal, ClassesModal e StudentsModal iguais ao original */}
         
         function ConfigModal({ onClose, showToast }) {
             const [apiKey, setApiKey] = useState(CloudSync.getKey());
@@ -1244,7 +1210,6 @@
                 setName('');
                 setRole('viewer');
                 
-                // Força sincronização imediata
                 setTimeout(async () => {
                     if (CloudSync.getKey()) {
                         const result = await CloudSync.save({ classes, users: { ...users, [login]: { password, name, role } } });
@@ -1271,7 +1236,6 @@
                 setEditingUser(null);
                 setNewPassword('');
                 
-                // Força sincronização imediata
                 setTimeout(async () => {
                     if (CloudSync.getKey()) {
                         const result = await CloudSync.save({ classes, users: updatedUsers });
@@ -1489,7 +1453,6 @@
                     return;
                 }
                 
-                // Divide por linhas e limpa espaços
                 const lines = bulkInput.split('\n').map(line => line.trim()).filter(line => line.length > 0);
                 
                 if (lines.length === 0) {
