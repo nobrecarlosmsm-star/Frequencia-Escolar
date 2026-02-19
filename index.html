@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
-<head>
+<head>A
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Frequência Escolar</title>
@@ -8,6 +8,9 @@
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- jsPDF para geração de PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
     <style>
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         .animate-spin { animation: spin 1s linear infinite; }
@@ -29,8 +32,8 @@
         
         // CONFIGURAÇÃO CENTRAL - Edite aqui sua chave da API e BIN ID
         const SHARED_CONFIG = {
-            apiKey: '$2a$10$LVhD8Cj/YDHnZ.LAXI5.Le3VqZCMWJ0BXMs8konXq0FsxfdfRarOe', // Cole sua chave da API aqui (só precisa configurar UMA VEZ)
-            binId: '698dac12d0ea881f40b4991f'   // Cole seu BIN ID aqui (gerado automaticamente na primeira sincronização)
+            apiKey: '', // Cole sua chave da API aqui (só precisa configurar UMA VEZ)
+            binId: ''   // Cole seu BIN ID aqui (gerado automaticamente na primeira sincronização)
         };
         
         // Toast notification component
@@ -393,7 +396,7 @@
                     <div className="max-w-7xl mx-auto p-6">
                         {activeTab === 'dashboard' && <Dashboard classes={classes} />}
                         {activeTab === 'frequency' && <Frequency classes={classes} setClasses={setClasses} selectedClass={selectedClass} setSelectedClass={setSelectedClass} selectedDate={selectedDate} setSelectedDate={setSelectedDate} canEdit={user.canEdit} setShowStudents={setShowStudents} showToast={showToast} />}
-                        {activeTab === 'reports' && <Reports classes={classes} />}
+                        {activeTab === 'reports' && <Reports classes={classes} showToast={showToast} />}
                     </div>
                     
                     {showConfig && <ConfigModal onClose={() => setShowConfig(false)} showToast={showToast} />}
@@ -600,10 +603,12 @@
             );
         }
         
-        function Reports({ classes }) {
+        function Reports({ classes, showToast }) {
             const [selectedClass, setSelectedClass] = useState(null);
             const [startDate, setStartDate] = useState(new Date(new Date().setDate(1)).toISOString().split('T')[0]);
             const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+            const [selectedStudent, setSelectedStudent] = useState(null);
+            const [showStudentModal, setShowStudentModal] = useState(false);
             
             const cls = classes.find(c => c.id === selectedClass);
             
@@ -631,11 +636,311 @@
                     const total = presente + falta + justificada;
                     const percentage = total > 0 ? ((presente / total) * 100).toFixed(1) : 0;
                     
-                    return { student, presente, falta, justificada, total, percentage };
+                    return { student, presente, falta, justificada, total, percentage, days };
                 });
             };
             
             const report = generateReport();
+            
+            // Função para gerar PDF Individual
+            const generateIndividualPDF = () => {
+                if (!selectedStudent || !report) return;
+                
+                const studentData = report.find(r => r.student.id === selectedStudent);
+                if (!studentData) return;
+                
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                
+                // Título
+                doc.setFontSize(20);
+                doc.setFont(undefined, 'bold');
+                doc.text('Relatório Individual de Frequência', 105, 20, { align: 'center' });
+                
+                // Info da turma
+                doc.setFontSize(12);
+                doc.setFont(undefined, 'normal');
+                doc.text(`Turma: ${cls.name}`, 20, 35);
+                doc.text(`Período: ${new Date(startDate + 'T00:00:00').toLocaleDateString('pt-BR')} a ${new Date(endDate + 'T00:00:00').toLocaleDateString('pt-BR')}`, 20, 42);
+                
+                // Nome do aluno
+                doc.setFontSize(16);
+                doc.setFont(undefined, 'bold');
+                doc.text(`Aluno: ${studentData.student.name}`, 20, 55);
+                
+                // Estatísticas
+                doc.setFontSize(12);
+                doc.setFont(undefined, 'normal');
+                doc.text(`Presenças: ${studentData.presente}`, 20, 70);
+                doc.text(`Faltas: ${studentData.falta}`, 20, 77);
+                doc.text(`Justificadas: ${studentData.justificada}`, 20, 84);
+                doc.text(`Total de Aulas: ${studentData.total}`, 20, 91);
+                doc.text(`Percentual de Presença: ${studentData.percentage}%`, 20, 98);
+                
+                // Status
+                const status = parseFloat(studentData.percentage) >= 75 ? 'APROVADO' : 'REPROVADO por falta';
+                doc.setFontSize(14);
+                doc.setFont(undefined, 'bold');
+                doc.text(`Situação: ${status}`, 20, 110);
+                
+                doc.save(`relatorio_${studentData.student.name.replace(/\s/g, '_')}.pdf`);
+                showToast('PDF Individual gerado com sucesso!', 'success');
+                setShowStudentModal(false);
+            };
+            
+            // Função para gerar PDF da Turma Completa
+            const generateClassPDF = () => {
+                if (!report) return;
+                
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                
+                // Título
+                doc.setFontSize(18);
+                doc.setFont(undefined, 'bold');
+                doc.text('Relatório de Frequência da Turma', 105, 15, { align: 'center' });
+                
+                // Info
+                doc.setFontSize(11);
+                doc.setFont(undefined, 'normal');
+                doc.text(`Turma: ${cls.name}`, 105, 23, { align: 'center' });
+                doc.text(`Período: ${new Date(startDate + 'T00:00:00').toLocaleDateString('pt-BR')} a ${new Date(endDate + 'T00:00:00').toLocaleDateString('pt-BR')}`, 105, 29, { align: 'center' });
+                
+                // Tabela
+                const tableData = report.map((r, idx) => [
+                    idx + 1,
+                    r.student.name,
+                    r.presente,
+                    r.falta,
+                    r.justificada,
+                    r.total,
+                    `${r.percentage}%`
+                ]);
+                
+                doc.autoTable({
+                    startY: 35,
+                    head: [['#', 'Aluno', 'Presenças', 'Faltas', 'Justificadas', 'Total', '% Presença']],
+                    body: tableData,
+                    theme: 'grid',
+                    headStyles: { fillColor: [91, 95, 199], fontSize: 10, fontStyle: 'bold' },
+                    styles: { fontSize: 9, cellPadding: 3 },
+                    columnStyles: {
+                        0: { cellWidth: 10 },
+                        1: { cellWidth: 70 },
+                        2: { cellWidth: 20, halign: 'center' },
+                        3: { cellWidth: 20, halign: 'center' },
+                        4: { cellWidth: 25, halign: 'center' },
+                        5: { cellWidth: 20, halign: 'center' },
+                        6: { cellWidth: 25, halign: 'center' }
+                    }
+                });
+                
+                // Totais
+                const finalY = doc.lastAutoTable.finalY + 10;
+                doc.setFontSize(10);
+                doc.text(`Total de Presenças: ${report.reduce((sum, r) => sum + r.presente, 0)}`, 20, finalY);
+                doc.text(`Total de Faltas: ${report.reduce((sum, r) => sum + r.falta, 0)}`, 20, finalY + 6);
+                doc.text(`Total de Justificadas: ${report.reduce((sum, r) => sum + r.justificada, 0)}`, 20, finalY + 12);
+                
+                doc.save(`relatorio_turma_${cls.name.replace(/\s/g, '_')}.pdf`);
+                showToast('PDF da Turma gerado com sucesso!', 'success');
+            };
+            
+            // Função para gerar PDF por Período
+            const generatePeriodPDF = () => {
+                if (!report) return;
+                
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                
+                // Calcular estatísticas por semana/mês
+                const start = new Date(startDate + 'T00:00:00');
+                const end = new Date(endDate + 'T00:00:00');
+                const diffDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+                
+                doc.setFontSize(18);
+                doc.setFont(undefined, 'bold');
+                doc.text('Relatório de Frequência por Período', 105, 15, { align: 'center' });
+                
+                doc.setFontSize(11);
+                doc.setFont(undefined, 'normal');
+                doc.text(`Turma: ${cls.name}`, 105, 23, { align: 'center' });
+                doc.text(`Período: ${diffDays + 1} dias (${new Date(startDate + 'T00:00:00').toLocaleDateString('pt-BR')} a ${new Date(endDate + 'T00:00:00').toLocaleDateString('pt-BR')})`, 105, 29, { align: 'center' });
+                
+                // Estatísticas gerais
+                const totalPresencas = report.reduce((sum, r) => sum + r.presente, 0);
+                const totalFaltas = report.reduce((sum, r) => sum + r.falta, 0);
+                const totalJustificadas = report.reduce((sum, r) => sum + r.justificada, 0);
+                const totalAulas = report.reduce((sum, r) => sum + r.total, 0);
+                const mediaPresenca = totalAulas > 0 ? ((totalPresencas / totalAulas) * 100).toFixed(1) : 0;
+                
+                doc.setFontSize(12);
+                doc.setFont(undefined, 'bold');
+                doc.text('Estatísticas do Período:', 20, 45);
+                
+                doc.setFont(undefined, 'normal');
+                doc.setFontSize(11);
+                doc.text(`Total de Presenças: ${totalPresencas}`, 20, 55);
+                doc.text(`Total de Faltas: ${totalFaltas}`, 20, 62);
+                doc.text(`Total de Justificadas: ${totalJustificadas}`, 20, 69);
+                doc.text(`Média de Presença da Turma: ${mediaPresenca}%`, 20, 76);
+                doc.text(`Número de Alunos Ativos: ${report.length}`, 20, 83);
+                
+                // Tabela resumida
+                const tableData = report.map((r, idx) => [
+                    idx + 1,
+                    r.student.name,
+                    `${r.percentage}%`,
+                    parseFloat(r.percentage) >= 75 ? 'OK' : 'ATENÇÃO'
+                ]);
+                
+                doc.autoTable({
+                    startY: 95,
+                    head: [['#', 'Aluno', '% Presença', 'Status']],
+                    body: tableData,
+                    theme: 'grid',
+                    headStyles: { fillColor: [255, 140, 0], fontSize: 10, fontStyle: 'bold' },
+                    styles: { fontSize: 9, cellPadding: 3 },
+                    columnStyles: {
+                        0: { cellWidth: 15 },
+                        1: { cellWidth: 100 },
+                        2: { cellWidth: 30, halign: 'center' },
+                        3: { cellWidth: 35, halign: 'center' }
+                    }
+                });
+                
+                doc.save(`relatorio_periodo_${cls.name.replace(/\s/g, '_')}.pdf`);
+                showToast('PDF por Período gerado com sucesso!', 'success');
+            };
+            
+            // Função para gerar PDF com Gráficos
+            const generateGraphPDF = () => {
+                if (!report) return;
+                
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                
+                doc.setFontSize(18);
+                doc.setFont(undefined, 'bold');
+                doc.text('Relatório com Estatísticas Visuais', 105, 15, { align: 'center' });
+                
+                doc.setFontSize(11);
+                doc.setFont(undefined, 'normal');
+                doc.text(`Turma: ${cls.name}`, 105, 23, { align: 'center' });
+                doc.text(`Período: ${new Date(startDate + 'T00:00:00').toLocaleDateString('pt-BR')} a ${new Date(endDate + 'T00:00:00').toLocaleDateString('pt-BR')}`, 105, 29, { align: 'center' });
+                
+                // Estatísticas gerais
+                const totalPresencas = report.reduce((sum, r) => sum + r.presente, 0);
+                const totalFaltas = report.reduce((sum, r) => sum + r.falta, 0);
+                const totalJustificadas = report.reduce((sum, r) => sum + r.justificada, 0);
+                
+                // Gráfico de pizza simulado (texto)
+                doc.setFontSize(14);
+                doc.setFont(undefined, 'bold');
+                doc.text('Distribuição Geral:', 20, 45);
+                
+                const total = totalPresencas + totalFaltas + totalJustificadas;
+                const percPresenca = total > 0 ? ((totalPresencas / total) * 100).toFixed(1) : 0;
+                const percFalta = total > 0 ? ((totalFaltas / total) * 100).toFixed(1) : 0;
+                const percJust = total > 0 ? ((totalJustificadas / total) * 100).toFixed(1) : 0;
+                
+                doc.setFontSize(11);
+                doc.setFont(undefined, 'normal');
+                doc.setTextColor(0, 128, 0);
+                doc.text(`Presenças: ${totalPresencas} (${percPresenca}%)`, 20, 55);
+                doc.setTextColor(255, 0, 0);
+                doc.text(`Faltas: ${totalFaltas} (${percFalta}%)`, 20, 62);
+                doc.setTextColor(255, 165, 0);
+                doc.text(`Justificadas: ${totalJustificadas} (${percJust}%)`, 20, 69);
+                
+                doc.setTextColor(0, 0, 0);
+                
+                // Ranking de frequência
+                doc.setFontSize(14);
+                doc.setFont(undefined, 'bold');
+                doc.text('Ranking de Frequência:', 20, 85);
+                
+                const sorted = [...report].sort((a, b) => parseFloat(b.percentage) - parseFloat(a.percentage));
+                const top5 = sorted.slice(0, 5);
+                
+                doc.setFontSize(10);
+                doc.setFont(undefined, 'normal');
+                top5.forEach((r, idx) => {
+                    const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '';
+                    doc.text(`${idx + 1}. ${r.student.name}: ${r.percentage}% ${medal}`, 20, 95 + (idx * 7));
+                });
+                
+                // Alunos em risco
+                const emRisco = report.filter(r => parseFloat(r.percentage) < 75);
+                if (emRisco.length > 0) {
+                    doc.setFontSize(14);
+                    doc.setFont(undefined, 'bold');
+                    doc.setTextColor(255, 0, 0);
+                    doc.text(`Alunos em Risco (< 75%): ${emRisco.length}`, 20, 135);
+                    
+                    doc.setFontSize(10);
+                    doc.setFont(undefined, 'normal');
+                    emRisco.slice(0, 5).forEach((r, idx) => {
+                        doc.text(`• ${r.student.name}: ${r.percentage}%`, 20, 145 + (idx * 7));
+                    });
+                }
+                
+                doc.setTextColor(0, 0, 0);
+                
+                doc.save(`relatorio_graficos_${cls.name.replace(/\s/g, '_')}.pdf`);
+                showToast('PDF com Gráficos gerado com sucesso!', 'success');
+            };
+            
+            // Função para gerar Folha de Presença
+            const generateAttendanceSheet = () => {
+                if (!cls) return;
+                
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                
+                doc.setFontSize(18);
+                doc.setFont(undefined, 'bold');
+                doc.text('Folha de Presença', 105, 15, { align: 'center' });
+                
+                doc.setFontSize(11);
+                doc.setFont(undefined, 'normal');
+                doc.text(`Turma: ${cls.name}`, 20, 25);
+                doc.text(`Data: ___/___/_____`, 20, 32);
+                doc.text(`Professor: _________________________________`, 20, 39);
+                
+                // Lista de alunos
+                const activeStudents = cls.students.filter(s => s.status === 'ativo');
+                const tableData = activeStudents.map((s, idx) => [
+                    idx + 1,
+                    s.name,
+                    '',
+                    ''
+                ]);
+                
+                doc.autoTable({
+                    startY: 50,
+                    head: [['#', 'Nome do Aluno', 'Presente', 'Falta']],
+                    body: tableData,
+                    theme: 'grid',
+                    headStyles: { fillColor: [0, 128, 128], fontSize: 11, fontStyle: 'bold' },
+                    styles: { fontSize: 10, cellPadding: 5, minCellHeight: 12 },
+                    columnStyles: {
+                        0: { cellWidth: 15, halign: 'center' },
+                        1: { cellWidth: 110 },
+                        2: { cellWidth: 30, halign: 'center' },
+                        3: { cellWidth: 25, halign: 'center' }
+                    }
+                });
+                
+                // Rodapé
+                const finalY = doc.lastAutoTable.finalY + 15;
+                doc.setFontSize(9);
+                doc.text('Assinatura do Professor: _________________________________', 20, finalY);
+                doc.text(`Total de Alunos: ${activeStudents.length}`, 20, finalY + 10);
+                
+                doc.save(`folha_presenca_${cls.name.replace(/\s/g, '_')}.pdf`);
+                showToast('Folha de Presença gerada com sucesso!', 'success');
+            };
             
             const handlePrint = () => {
                 window.print();
@@ -671,12 +976,95 @@
                             </div>
                         </div>
                         
+                        {/* BOTÕES DE PDF - Aparecem SOMENTE quando uma turma é selecionada */}
                         {report && (
-                            <button onClick={handlePrint} className="mt-4 bg-indigo-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-indigo-700 transition">
-                                🖨️ Imprimir Relatório
-                            </button>
+                            <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-6 rounded-xl border-2 border-purple-200 mb-4 mt-4">
+                                <h3 className="text-xl font-bold mb-4 text-purple-800">📄 Exportar para PDF</h3>
+                                
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                    {/* Botão 1 - Individual */}
+                                    <button onClick={() => setShowStudentModal(true)} className="bg-blue-600 text-white px-6 py-4 rounded-lg font-bold hover:bg-blue-700 transition shadow-lg flex items-center justify-center gap-2">
+                                        <span className="text-2xl">👤</span>
+                                        <div className="text-left">
+                                            <div className="text-sm">Relatório</div>
+                                            <div>Individual</div>
+                                        </div>
+                                    </button>
+
+                                    {/* Botão 2 - Turma Completa */}
+                                    <button onClick={generateClassPDF} className="bg-green-600 text-white px-6 py-4 rounded-lg font-bold hover:bg-green-700 transition shadow-lg flex items-center justify-center gap-2">
+                                        <span className="text-2xl">👥</span>
+                                        <div className="text-left">
+                                            <div className="text-sm">Relatório</div>
+                                            <div>Turma Completa</div>
+                                        </div>
+                                    </button>
+
+                                    {/* Botão 3 - Por Período */}
+                                    <button onClick={generatePeriodPDF} className="bg-orange-600 text-white px-6 py-4 rounded-lg font-bold hover:bg-orange-700 transition shadow-lg flex items-center justify-center gap-2">
+                                        <span className="text-2xl">📅</span>
+                                        <div className="text-left">
+                                            <div className="text-sm">Relatório</div>
+                                            <div>Por Período</div>
+                                        </div>
+                                    </button>
+
+                                    {/* Botão 4 - Com Gráficos */}
+                                    <button onClick={generateGraphPDF} className="bg-purple-600 text-white px-6 py-4 rounded-lg font-bold hover:bg-purple-700 transition shadow-lg flex items-center justify-center gap-2">
+                                        <span className="text-2xl">📊</span>
+                                        <div className="text-left">
+                                            <div className="text-sm">Relatório com</div>
+                                            <div>Gráficos</div>
+                                        </div>
+                                    </button>
+
+                                    {/* Botão 5 - Folha de Presença */}
+                                    <button onClick={generateAttendanceSheet} className="bg-teal-600 text-white px-6 py-4 rounded-lg font-bold hover:bg-teal-700 transition shadow-lg flex items-center justify-center gap-2">
+                                        <span className="text-2xl">📋</span>
+                                        <div className="text-left">
+                                            <div className="text-sm">Folha de</div>
+                                            <div>Presença</div>
+                                        </div>
+                                    </button>
+
+                                    {/* Botão 6 - Imprimir */}
+                                    <button onClick={handlePrint} className="bg-indigo-600 text-white px-6 py-4 rounded-lg font-bold hover:bg-indigo-700 transition shadow-lg flex items-center justify-center gap-2">
+                                        <span className="text-2xl">🖨️</span>
+                                        <div className="text-left">
+                                            <div className="text-sm">Imprimir</div>
+                                            <div>Relatório</div>
+                                        </div>
+                                    </button>
+                                </div>
+                            </div>
                         )}
                     </div>
+                    
+                    {/* Modal de seleção de aluno para relatório individual */}
+                    {showStudentModal && report && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                            <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-2xl">
+                                <h3 className="text-xl font-bold mb-4">Selecione o Aluno</h3>
+                                <div className="space-y-2 max-h-96 overflow-y-auto">
+                                    {report.map(r => (
+                                        <button
+                                            key={r.student.id}
+                                            onClick={() => {
+                                                setSelectedStudent(r.student.id);
+                                                generateIndividualPDF();
+                                            }}
+                                            className="w-full text-left p-3 border-2 rounded-lg hover:bg-blue-50 hover:border-blue-500 transition">
+                                            <div className="font-bold">{r.student.name}</div>
+                                            <div className="text-sm text-gray-600">Presença: {r.percentage}%</div>
+                                        </button>
+                                    ))}
+                                </div>
+                                <button onClick={() => setShowStudentModal(false)} className="w-full mt-4 bg-gray-200 py-3 rounded-lg font-bold hover:bg-gray-300 transition">
+                                    ❌ Cancelar
+                                </button>
+                            </div>
+                        </div>
+                    )}
                     
                     {report ? (
                         <div className="bg-white p-6 rounded-xl shadow-lg">
