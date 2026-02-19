@@ -137,13 +137,69 @@
             const [lastSync, setLastSync] = useState(null);
             const [toast, setToast] = useState(null);
             const [isOnline, setIsOnline] = useState(true);
+            const [isLoading, setIsLoading] = useState(true);
             
-            useEffect(() => { loadData(); checkOnlineStatus(); }, []);
+            // Carrega dados e restaura sessão ao iniciar
+            useEffect(() => { 
+                const init = async () => {
+                    await loadData();
+                    await checkOnlineStatus();
+                    await restoreSession();
+                    setIsLoading(false);
+                };
+                init();
+            }, []);
+            
             useEffect(() => {
                 if (!user) return;
                 const interval = setInterval(() => autoSync(), 15000);
                 return () => clearInterval(interval);
             }, [user, classes, users]);
+            
+            // Salva sessão sempre que o usuário mudar
+            useEffect(() => {
+                if (user) {
+                    localStorage.setItem('userSession', JSON.stringify({
+                        login: user.login,
+                        role: user.role,
+                        name: user.name,
+                        canEdit: user.canEdit,
+                        canManage: user.canManage
+                    }));
+                }
+            }, [user]);
+            
+            // Função para restaurar sessão
+            const restoreSession = async () => {
+                const savedSession = localStorage.getItem('userSession');
+                if (!savedSession) return;
+                
+                try {
+                    const userData = JSON.parse(savedSession);
+                    
+                    // Se tem chave da API, verifica se usuário ainda existe na nuvem
+                    if (CloudSync.getKey()) {
+                        const cloudData = await CloudSync.load();
+                        if (cloudData && cloudData.users) {
+                            const cloudUser = cloudData.users[userData.login];
+                            if (cloudUser) {
+                                // Usuário ainda existe, restaura a sessão
+                                setUser(userData);
+                                setUsers(cloudData.users);
+                                setClasses(cloudData.classes || []);
+                                setLastSync(cloudData.lastSync);
+                                return;
+                            }
+                        }
+                    }
+                    
+                    // Se não conseguiu validar na nuvem mas tem sessão, restaura localmente
+                    setUser(userData);
+                } catch (e) {
+                    console.error('Erro ao restaurar sessão:', e);
+                    localStorage.removeItem('userSession');
+                }
+            };
             
             const checkOnlineStatus = async () => {
                 const online = await CloudSync.checkConnection();
@@ -240,12 +296,14 @@
                             setClasses(cloudData.classes || []);
                             setLastSync(cloudData.lastSync);
                             
-                            setUser({ 
+                            const userData = { 
                                 login, 
                                 ...u, 
                                 canEdit: u.role === 'admin' || u.role === 'editor',
                                 canManage: u.role === 'admin'
-                            });
+                            };
+                            
+                            setUser(userData);
                             showToast(`Bem-vindo, ${u.name}!`, 'success');
                         } else {
                             showToast('Login ou senha incorretos!', 'error');
@@ -253,12 +311,13 @@
                     } else {
                         const u = users[login];
                         if (u && u.password === pass) {
-                            setUser({ 
+                            const userData = { 
                                 login, 
                                 ...u, 
                                 canEdit: u.role === 'admin' || u.role === 'editor',
                                 canManage: u.role === 'admin'
-                            });
+                            };
+                            setUser(userData);
                             showToast(`Bem-vindo, ${u.name}!`, 'success');
                         } else {
                             showToast('Não foi possível carregar os dados da nuvem. Verifique sua chave da API.', 'error');
@@ -267,18 +326,37 @@
                 } else {
                     const u = users[login];
                     if (u && u.password === pass) {
-                        setUser({ 
+                        const userData = { 
                             login, 
                             ...u, 
                             canEdit: u.role === 'admin' || u.role === 'editor',
                             canManage: u.role === 'admin'
-                        });
+                        };
+                        setUser(userData);
                         showToast(`Bem-vindo, ${u.name}!`, 'success');
                     } else {
                         showToast('Login ou senha incorretos!', 'error');
                     }
                 }
             };
+            
+            const handleLogout = () => {
+                localStorage.removeItem('userSession');
+                setUser(null);
+                showToast('Logout realizado com sucesso!', 'success');
+            };
+            
+            // Tela de carregamento enquanto verifica sessão
+            if (isLoading) {
+                return (
+                    <div className="min-h-screen header-gradient flex items-center justify-center">
+                        <div className="text-center">
+                            <div className="text-6xl mb-4 animate-spin">⟳</div>
+                            <p className="text-white text-xl font-bold">Carregando...</p>
+                        </div>
+                    </div>
+                );
+            }
             
             if (!user) {
                 return (
@@ -348,7 +426,7 @@
                                             ⚙️ Configurar
                                         </button>
                                     )}
-                                    <button onClick={() => setUser(null)}
+                                    <button onClick={handleLogout}
                                         className="bg-red-500 px-6 py-2 rounded-lg font-bold hover:bg-red-600 transition">
                                         🚪 Sair
                                     </button>
