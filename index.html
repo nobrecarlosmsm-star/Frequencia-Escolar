@@ -144,8 +144,7 @@
                 const init = async () => {
                     await loadData();
                     await checkOnlineStatus();
-                    // DESABILITADO: await restoreSession(); 
-                    // Sistema não faz mais login automático
+                    await restoreSession(); // REATIVADO: Login automático
                     setIsLoading(false);
                 };
                 init();
@@ -158,18 +157,17 @@
             }, [user, classes, users]);
             
             // Salva sessão sempre que o usuário mudar
-            // DESABILITADO: Não salva mais sessão automaticamente
-            // useEffect(() => {
-            //     if (user) {
-            //         localStorage.setItem('userSession', JSON.stringify({
-            //             login: user.login,
-            //             role: user.role,
-            //             name: user.name,
-            //             canEdit: user.canEdit,
-            //             canManage: user.canManage
-            //         }));
-            //     }
-            // }, [user]);
+            useEffect(() => {
+                if (user) {
+                    localStorage.setItem('userSession', JSON.stringify({
+                        login: user.login,
+                        role: user.role,
+                        name: user.name,
+                        canEdit: user.canEdit,
+                        canManage: user.canManage
+                    }));
+                }
+            }, [user]);
             
             // Função para restaurar sessão
             const restoreSession = async () => {
@@ -1851,7 +1849,7 @@ function History({ classes, showToast }) {
             
             return (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-xl p-6 w-full max-w-2xl shadow-2xl">
+                    <div className="bg-white rounded-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
                         <h2 className="text-2xl font-bold mb-4">🏫 Gerenciar Turmas</h2>
                         
                         <div className="bg-green-50 p-4 rounded-lg mb-4 border-2 border-green-200">
@@ -1867,29 +1865,33 @@ function History({ classes, showToast }) {
                             </div>
                         </div>
                         
-                        <div className="space-y-2">
-                            <h3 className="font-bold mb-2">📋 Turmas Cadastradas:</h3>
+                        <div className="space-y-2 mb-4">
+                            <h3 className="font-bold mb-2">📋 Turmas Cadastradas ({classes.length}):</h3>
                             {classes.length === 0 ? (
                                 <p className="text-gray-500 text-center py-4">Nenhuma turma cadastrada</p>
                             ) : (
-                                classes.map(c => (
-                                    <div key={c.id} className="flex items-center gap-3 p-4 border-2 rounded-lg bg-white hover:bg-gray-50 transition">
-                                        <div className="flex-1">
-                                            <p className="font-bold text-lg">{c.name}</p>
-                                            <p className="text-sm text-gray-600">{c.students.length} aluno(s)</p>
+                                <div className="max-h-96 overflow-y-auto space-y-2">
+                                    {classes.map(c => (
+                                        <div key={c.id} className="flex items-center gap-3 p-4 border-2 rounded-lg bg-white hover:bg-gray-50 transition">
+                                            <div className="flex-1">
+                                                <p className="font-bold text-lg">{c.name}</p>
+                                                <p className="text-sm text-gray-600">{c.students.length} aluno(s)</p>
+                                            </div>
+                                            <button onClick={() => handleDelete(c.id)} 
+                                                className="text-red-600 px-4 py-2 hover:bg-red-50 rounded-lg font-semibold transition">
+                                                🗑️ Excluir
+                                            </button>
                                         </div>
-                                        <button onClick={() => handleDelete(c.id)} 
-                                            className="text-red-600 px-4 py-2 hover:bg-red-50 rounded-lg font-semibold transition">
-                                            🗑️ Excluir
-                                        </button>
-                                    </div>
-                                ))
+                                    ))}
+                                </div>
                             )}
                         </div>
                         
-                        <button onClick={onClose} className="w-full mt-4 bg-gray-200 py-3 rounded-lg font-bold hover:bg-gray-300 transition">
-                            ❌ Fechar
-                        </button>
+                        <div className="sticky bottom-0 bg-white pt-4 border-t-2">
+                            <button onClick={onClose} className="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 transition shadow-lg">
+                                ❌ Fechar
+                            </button>
+                        </div>
                     </div>
                 </div>
             );
@@ -1902,6 +1904,14 @@ function History({ classes, showToast }) {
             const [editingExit, setEditingExit] = useState(null);
             const [exitDate, setExitDate] = useState(new Date().toISOString().split('T')[0]);
             const [exitObservation, setExitObservation] = useState('');
+            const [posCenso, setPosCenso] = useState(false);
+            
+            // Função para ordenar alunos: alfabético para normais, no final para pós-censo
+            const sortStudents = (students) => {
+                const normais = students.filter(s => !s.posCenso).sort((a, b) => a.name.localeCompare(b.name));
+                const posCenso = students.filter(s => s.posCenso).sort((a, b) => a.name.localeCompare(b.name));
+                return [...normais, ...posCenso];
+            };
             
             const handleAdd = () => {
                 if (!name.trim()) {
@@ -1913,6 +1923,7 @@ function History({ classes, showToast }) {
                     id: Date.now(),
                     name: name.trim(),
                     status: 'ativo',
+                    posCenso: posCenso,
                     attendance: {},
                     observations: {},
                     exitDate: null,
@@ -1921,12 +1932,14 @@ function History({ classes, showToast }) {
                 
                 setClasses(classes.map(c => 
                     c.id === cls.id 
-                        ? { ...c, students: [...c.students, newStudent] }
+                        ? { ...c, students: sortStudents([...c.students, newStudent]) }
                         : c
                 ));
                 
-                showToast('Aluno adicionado com sucesso!', 'success');
+                const tipo = posCenso ? '(Pós-censo)' : '';
+                showToast(`Aluno ${tipo} adicionado com sucesso!`, 'success');
                 setName('');
+                setPosCenso(false);
             };
             
             const handleBulkAdd = () => {
@@ -1946,6 +1959,7 @@ function History({ classes, showToast }) {
                     id: Date.now() + index,
                     name: studentName,
                     status: 'ativo',
+                    posCenso: posCenso,
                     attendance: {},
                     observations: {},
                     exitDate: null,
@@ -1954,13 +1968,15 @@ function History({ classes, showToast }) {
                 
                 setClasses(classes.map(c => 
                     c.id === cls.id 
-                        ? { ...c, students: [...c.students, ...newStudents] }
+                        ? { ...c, students: sortStudents([...c.students, ...newStudents]) }
                         : c
                 ));
                 
-                showToast(`${newStudents.length} aluno(s) adicionado(s) com sucesso!`, 'success');
+                const tipo = posCenso ? '(Pós-censo)' : '';
+                showToast(`${newStudents.length} aluno(s) ${tipo} adicionado(s) com sucesso!`, 'success');
                 setBulkInput('');
                 setShowBulkAdd(false);
+                setPosCenso(false);
             };
             
             const handleStatusChange = (studentId, newStatus) => {
@@ -2053,14 +2069,27 @@ function History({ classes, showToast }) {
                         {!showBulkAdd ? (
                             <div className="bg-blue-50 p-4 rounded-lg mb-4 border-2 border-blue-200">
                                 <h3 className="font-bold mb-3">➕ Adicionar Novo Aluno</h3>
-                                <div className="flex gap-2">
-                                    <input value={name} onChange={(e) => setName(e.target.value)}
-                                        placeholder="Nome completo do aluno" 
-                                        className="flex-1 px-4 py-3 border-2 rounded-lg focus:border-blue-500 outline-none" 
-                                        onKeyPress={(e) => e.key === 'Enter' && handleAdd()} />
-                                    <button onClick={handleAdd} className="bg-blue-600 text-white px-8 py-3 rounded-lg font-bold hover:bg-blue-700 transition">
-                                        ✅ Adicionar
-                                    </button>
+                                <div className="space-y-3">
+                                    <div className="flex gap-2">
+                                        <input value={name} onChange={(e) => setName(e.target.value)}
+                                            placeholder="Nome completo do aluno" 
+                                            className="flex-1 px-4 py-3 border-2 rounded-lg focus:border-blue-500 outline-none" 
+                                            onKeyPress={(e) => e.key === 'Enter' && handleAdd()} />
+                                        <button onClick={handleAdd} className="bg-blue-600 text-white px-8 py-3 rounded-lg font-bold hover:bg-blue-700 transition">
+                                            ✅ Adicionar
+                                        </button>
+                                    </div>
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={posCenso}
+                                            onChange={(e) => setPosCenso(e.target.checked)}
+                                            className="w-5 h-5 rounded border-2 border-blue-500"
+                                        />
+                                        <span className="font-semibold text-blue-800">
+                                            📅 Matrícula Pós-Censo (aluno será colocado no final da lista)
+                                        </span>
+                                    </label>
                                 </div>
                             </div>
                         ) : (
@@ -2074,7 +2103,18 @@ function History({ classes, showToast }) {
                                     className="w-full px-4 py-3 border-2 rounded-lg focus:border-purple-500 outline-none resize-none font-mono text-sm"
                                     rows="8"
                                 />
-                                <button onClick={handleBulkAdd} className="w-full mt-3 bg-purple-600 text-white py-3 rounded-lg font-bold hover:bg-purple-700 transition">
+                                <label className="flex items-center gap-2 cursor-pointer my-3">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={posCenso}
+                                        onChange={(e) => setPosCenso(e.target.checked)}
+                                        className="w-5 h-5 rounded border-2 border-purple-500"
+                                    />
+                                    <span className="font-semibold text-purple-800">
+                                        📅 Matrícula Pós-Censo (alunos serão colocados no final da lista)
+                                    </span>
+                                </label>
+                                <button onClick={handleBulkAdd} className="w-full bg-purple-600 text-white py-3 rounded-lg font-bold hover:bg-purple-700 transition">
                                     ✅ Adicionar Todos os Alunos
                                 </button>
                             </div>
@@ -2085,11 +2125,23 @@ function History({ classes, showToast }) {
                             {cls.students.length === 0 ? (
                                 <p className="text-gray-500 text-center py-4">Nenhum aluno cadastrado</p>
                             ) : (
-                                cls.students.map(s => (
-                                    <div key={s.id} className="border-2 rounded-lg p-4 bg-white hover:bg-gray-50 transition">
-                                        <div className="flex items-center gap-3 mb-2">
-                                            <span className="flex-1 font-bold text-lg">{s.name}</span>
-                                            <select value={s.status} 
+                                (() => {
+                                    const sorted = sortStudents(cls.students);
+                                    return sorted.map((s, index) => (
+                                        <div key={s.id} className={`border-2 rounded-lg p-4 transition ${s.posCenso ? 'bg-yellow-50 border-yellow-300' : 'bg-white hover:bg-gray-50'}`}>
+                                            <div className="flex items-center gap-3 mb-2">
+                                                <span className="font-bold text-sm bg-indigo-100 w-8 h-8 rounded-full flex items-center justify-center">
+                                                    {index + 1}
+                                                </span>
+                                                <div className="flex-1">
+                                                    <span className="font-bold text-lg">{s.name}</span>
+                                                    {s.posCenso && (
+                                                        <span className="ml-2 text-xs bg-yellow-500 text-white px-2 py-1 rounded-full font-semibold">
+                                                            📅 PÓS-CENSO
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <select value={s.status} 
                                                 onChange={(e) => handleStatusChange(s.id, e.target.value)}
                                                 disabled={editingExit === s.id}
                                                 className="px-4 py-2 border-2 rounded-lg focus:border-indigo-500 outline-none bg-white">
@@ -2172,7 +2224,8 @@ function History({ classes, showToast }) {
                                             </div>
                                         )}
                                     </div>
-                                ))
+                                ));
+                                })()
                             )}
                         </div>
                         
