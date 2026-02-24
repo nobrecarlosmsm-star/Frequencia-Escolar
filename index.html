@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Frequência Escolar</title>
+    <title>Sistema de Frequência Escolar</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -446,6 +446,10 @@
                                     className={`px-6 py-3 rounded-lg font-bold transition ${activeTab === 'reports' ? 'bg-white text-indigo-600' : 'bg-indigo-500 hover:bg-indigo-400'}`}>
                                     📈 Relatórios
                                 </button>
+                                <button onClick={() => setActiveTab('history')}
+                                    className={`px-6 py-3 rounded-lg font-bold transition ${activeTab === 'history' ? 'bg-white text-indigo-600' : 'bg-indigo-500 hover:bg-indigo-400'}`}>
+                                    📋 Histórico
+                                </button>
                                 {user.canManage && (
                                     <>
                                         <button onClick={() => setShowClasses(true)}
@@ -466,6 +470,7 @@
                         {activeTab === 'dashboard' && <Dashboard classes={classes} />}
                         {activeTab === 'frequency' && <Frequency classes={classes} setClasses={setClasses} selectedClass={selectedClass} setSelectedClass={setSelectedClass} selectedDate={selectedDate} setSelectedDate={setSelectedDate} canEdit={user.canEdit} setShowStudents={setShowStudents} showToast={showToast} />}
                         {activeTab === 'reports' && <Reports classes={classes} showToast={showToast} />}
+                        {activeTab === 'history' && <History classes={classes} showToast={showToast} />}
                     </div>
                     
                     {showConfig && <ConfigModal onClose={() => setShowConfig(false)} showToast={showToast} />}
@@ -1164,6 +1169,360 @@
             );
         }
         
+        // NOVO COMPONENTE: Histórico de Transferidos e Falecidos
+        function History({ classes, showToast }) {
+            const [filterStatus, setFilterStatus] = useState('todos');
+            const [selectedClass, setSelectedClass] = useState(null);
+            const [selectedStudent, setSelectedStudent] = useState(null);
+            const [showReportModal, setShowReportModal] = useState(false);
+            
+            // Coleta todos os alunos transferidos e falecidos
+            const getInactiveStudents = () => {
+                const students = [];
+                classes.forEach(cls => {
+                    cls.students
+                        .filter(s => s.status !== 'ativo')
+                        .forEach(s => {
+                            students.push({
+                                ...s,
+                                className: cls.name,
+                                classId: cls.id
+                            });
+                        });
+                });
+                return students;
+            };
+            
+            const allInactive = getInactiveStudents();
+            
+            // Filtra por status
+            const filteredStudents = filterStatus === 'todos' 
+                ? allInactive 
+                : allInactive.filter(s => s.status === filterStatus);
+            
+            // Filtra por turma se selecionada
+            const displayStudents = selectedClass 
+                ? filteredStudents.filter(s => s.classId === selectedClass)
+                : filteredStudents;
+            
+            // Gera relatório do aluno até a data de saída
+            const generateStudentReport = (student) => {
+                if (!student.exitDate) {
+                    showToast('Aluno sem data de saída registrada!', 'error');
+                    return null;
+                }
+                
+                const exitDate = new Date(student.exitDate + 'T00:00:00');
+                let presente = 0, falta = 0, justificada = 0;
+                
+                // Conta apenas até a data de saída
+                Object.entries(student.attendance || {}).forEach(([date, status]) => {
+                    const attDate = new Date(date + 'T00:00:00');
+                    if (attDate <= exitDate) {
+                        if (status === 'presente') presente++;
+                        else if (status === 'falta') falta++;
+                        else if (status === 'justificada') justificada++;
+                    }
+                });
+                
+                const total = presente + falta + justificada;
+                const percentage = total > 0 ? ((presente / total) * 100).toFixed(1) : 0;
+                
+                return { student, presente, falta, justificada, total, percentage };
+            };
+            
+            // Gera PDF do histórico do aluno
+            const generateHistoryPDF = () => {
+                if (!selectedStudent) return;
+                
+                const report = generateStudentReport(selectedStudent);
+                if (!report) return;
+                
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                
+                // Título
+                doc.setFontSize(20);
+                doc.setFont(undefined, 'bold');
+                doc.text('Histórico de Frequência do Aluno', 105, 20, { align: 'center' });
+                
+                // Status
+                const statusText = selectedStudent.status === 'transferido' ? '🔄 TRANSFERIDO' : '🕊️ FALECIDO';
+                const statusColor = selectedStudent.status === 'transferido' ? [255, 140, 0] : [100, 100, 100];
+                doc.setFontSize(14);
+                doc.setTextColor(...statusColor);
+                doc.text(statusText, 105, 30, { align: 'center' });
+                doc.setTextColor(0, 0, 0);
+                
+                // Info do aluno
+                doc.setFontSize(12);
+                doc.setFont(undefined, 'normal');
+                doc.text(`Turma: ${selectedStudent.className}`, 20, 45);
+                doc.text(`Aluno: ${selectedStudent.name}`, 20, 52);
+                doc.text(`Data de Saída: ${new Date(selectedStudent.exitDate + 'T00:00:00').toLocaleDateString('pt-BR')}`, 20, 59);
+                
+                // Estatísticas
+                doc.setFontSize(14);
+                doc.setFont(undefined, 'bold');
+                doc.text('Frequência até a Data de Saída:', 20, 75);
+                
+                doc.setFontSize(12);
+                doc.setFont(undefined, 'normal');
+                doc.text(`Presenças: ${report.presente}`, 20, 85);
+                doc.text(`Faltas: ${report.falta}`, 20, 92);
+                doc.text(`Justificadas: ${report.justificada}`, 20, 99);
+                doc.text(`Total de Aulas: ${report.total}`, 20, 106);
+                doc.text(`Percentual de Presença: ${report.percentage}%`, 20, 113);
+                
+                // Situação final
+                const status = parseFloat(report.percentage) >= 75 ? 'APROVADO' : 'REPROVADO por falta';
+                doc.setFontSize(14);
+                doc.setFont(undefined, 'bold');
+                doc.text(`Situação Final: ${status}`, 20, 125);
+                
+                // Motivo da saída
+                doc.setFontSize(10);
+                doc.setFont(undefined, 'normal');
+                const motivo = selectedStudent.status === 'transferido' 
+                    ? 'Motivo: Transferência de escola' 
+                    : 'Motivo: Falecimento';
+                doc.text(motivo, 20, 140);
+                
+                // Observações se houver
+                if (selectedStudent.exitObservation) {
+                    doc.setFontSize(10);
+                    doc.setFont(undefined, 'bold');
+                    doc.text('Observações:', 20, 155);
+                    doc.setFont(undefined, 'normal');
+                    const lines = doc.splitTextToSize(selectedStudent.exitObservation, 170);
+                    doc.text(lines, 20, 162);
+                }
+                
+                doc.save(`historico_${selectedStudent.name.replace(/\s/g, '_')}.pdf`);
+                showToast('PDF do histórico gerado com sucesso!', 'success');
+                setShowReportModal(false);
+            };
+            
+            return (
+                <div className="space-y-6">
+                    <div className="bg-white p-6 rounded-xl shadow-lg">
+                        <h2 className="text-2xl font-bold mb-4">📋 Histórico de Alunos</h2>
+                        <p className="text-gray-600 mb-4">Consulte alunos transferidos e falecidos com seus registros de frequência</p>
+                        
+                        {/* Filtros */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-2">📌 Filtrar por Status:</label>
+                                <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}
+                                    className="w-full px-4 py-3 border-2 rounded-lg focus:border-indigo-500 outline-none">
+                                    <option value="todos">Todos</option>
+                                    <option value="transferido">🔄 Transferidos</option>
+                                    <option value="falecido">🕊️ Falecidos</option>
+                                </select>
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-2">🏫 Filtrar por Turma:</label>
+                                <select value={selectedClass || ''} onChange={(e) => setSelectedClass(Number(e.target.value) || null)}
+                                    className="w-full px-4 py-3 border-2 rounded-lg focus:border-indigo-500 outline-none">
+                                    <option value="">Todas as turmas</option>
+                                    {classes.map(c => (
+                                        <option key={c.id} value={c.id}>{c.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+                        
+                        {/* Estatísticas */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                            <div className="bg-orange-50 p-4 rounded-lg border-2 border-orange-200">
+                                <div className="text-2xl mb-1">🔄</div>
+                                <div className="text-sm text-gray-600">Transferidos</div>
+                                <div className="text-2xl font-bold text-orange-600">
+                                    {allInactive.filter(s => s.status === 'transferido').length}
+                                </div>
+                            </div>
+                            
+                            <div className="bg-gray-100 p-4 rounded-lg border-2 border-gray-300">
+                                <div className="text-2xl mb-1">🕊️</div>
+                                <div className="text-sm text-gray-600">Falecidos</div>
+                                <div className="text-2xl font-bold text-gray-600">
+                                    {allInactive.filter(s => s.status === 'falecido').length}
+                                </div>
+                            </div>
+                            
+                            <div className="bg-indigo-50 p-4 rounded-lg border-2 border-indigo-200">
+                                <div className="text-2xl mb-1">📊</div>
+                                <div className="text-sm text-gray-600">Total</div>
+                                <div className="text-2xl font-bold text-indigo-600">
+                                    {allInactive.length}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {/* Lista de alunos */}
+                    {displayStudents.length === 0 ? (
+                        <div className="bg-white p-12 rounded-xl shadow-lg text-center">
+                            <div className="text-6xl mb-4">📋</div>
+                            <p className="text-xl text-gray-600">Nenhum aluno encontrado nos filtros selecionados</p>
+                        </div>
+                    ) : (
+                        <div className="bg-white p-6 rounded-xl shadow-lg">
+                            <h3 className="text-xl font-bold mb-4">
+                                {displayStudents.length} aluno(s) encontrado(s)
+                            </h3>
+                            
+                            <div className="space-y-3">
+                                {displayStudents.map(student => {
+                                    const report = generateStudentReport(student);
+                                    return (
+                                        <div key={student.id} 
+                                            className={`border-2 rounded-lg p-4 ${
+                                                student.status === 'transferido' ? 'bg-orange-50 border-orange-200' : 'bg-gray-50 border-gray-300'
+                                            }`}>
+                                            <div className="flex items-center justify-between mb-3">
+                                                <div className="flex-1">
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="text-2xl">
+                                                            {student.status === 'transferido' ? '🔄' : '🕊️'}
+                                                        </span>
+                                                        <div>
+                                                            <p className="font-bold text-lg">{student.name}</p>
+                                                            <p className="text-sm text-gray-600">
+                                                                {student.className} • 
+                                                                {student.status === 'transferido' ? ' Transferido' : ' Falecido'}
+                                                                {student.exitDate && ` em ${new Date(student.exitDate + 'T00:00:00').toLocaleDateString('pt-BR')}`}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                
+                                                <button 
+                                                    onClick={() => {
+                                                        setSelectedStudent(student);
+                                                        setShowReportModal(true);
+                                                    }}
+                                                    className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-indigo-700 transition">
+                                                    📄 Ver Relatório
+                                                </button>
+                                            </div>
+                                            
+                                            {report && (
+                                                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+                                                    <div className="text-center p-2 bg-white rounded">
+                                                        <div className="text-green-600 font-bold">{report.presente}</div>
+                                                        <div className="text-gray-600">Presenças</div>
+                                                    </div>
+                                                    <div className="text-center p-2 bg-white rounded">
+                                                        <div className="text-red-600 font-bold">{report.falta}</div>
+                                                        <div className="text-gray-600">Faltas</div>
+                                                    </div>
+                                                    <div className="text-center p-2 bg-white rounded">
+                                                        <div className="text-yellow-600 font-bold">{report.justificada}</div>
+                                                        <div className="text-gray-600">Justificadas</div>
+                                                    </div>
+                                                    <div className="text-center p-2 bg-white rounded">
+                                                        <div className="font-bold">{report.total}</div>
+                                                        <div className="text-gray-600">Total</div>
+                                                    </div>
+                                                    <div className="text-center p-2 bg-white rounded">
+                                                        <div className={`font-bold ${parseFloat(report.percentage) >= 75 ? 'text-green-600' : 'text-red-600'}`}>
+                                                            {report.percentage}%
+                                                        </div>
+                                                        <div className="text-gray-600">Presença</div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            
+                                            {student.exitObservation && (
+                                                <div className="mt-3 p-3 bg-white rounded border-l-4 border-indigo-500">
+                                                    <p className="text-sm font-semibold text-gray-700">Observações:</p>
+                                                    <p className="text-sm text-gray-600 mt-1">{student.exitObservation}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+                    
+                    {/* Modal de Relatório */}
+                    {showReportModal && selectedStudent && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                            <div className="bg-white rounded-xl p-6 w-full max-w-2xl shadow-2xl">
+                                <h3 className="text-2xl font-bold mb-4">
+                                    {selectedStudent.status === 'transferido' ? '🔄' : '🕊️'} Relatório do Aluno
+                                </h3>
+                                
+                                <div className="mb-6">
+                                    <p className="text-lg font-bold">{selectedStudent.name}</p>
+                                    <p className="text-gray-600">{selectedStudent.className}</p>
+                                    {selectedStudent.exitDate && (
+                                        <p className="text-sm text-gray-500 mt-1">
+                                            Data de saída: {new Date(selectedStudent.exitDate + 'T00:00:00').toLocaleDateString('pt-BR')}
+                                        </p>
+                                    )}
+                                </div>
+                                
+                                {(() => {
+                                    const report = generateStudentReport(selectedStudent);
+                                    return report && (
+                                        <div className="bg-gray-50 p-6 rounded-lg mb-6">
+                                            <h4 className="font-bold mb-4">Frequência até a Data de Saída:</h4>
+                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                                <div className="text-center p-4 bg-white rounded-lg">
+                                                    <div className="text-3xl font-bold text-green-600">{report.presente}</div>
+                                                    <div className="text-sm text-gray-600">Presenças</div>
+                                                </div>
+                                                <div className="text-center p-4 bg-white rounded-lg">
+                                                    <div className="text-3xl font-bold text-red-600">{report.falta}</div>
+                                                    <div className="text-sm text-gray-600">Faltas</div>
+                                                </div>
+                                                <div className="text-center p-4 bg-white rounded-lg">
+                                                    <div className="text-3xl font-bold text-yellow-600">{report.justificada}</div>
+                                                    <div className="text-sm text-gray-600">Justificadas</div>
+                                                </div>
+                                                <div className="text-center p-4 bg-white rounded-lg">
+                                                    <div className="text-3xl font-bold">{report.total}</div>
+                                                    <div className="text-sm text-gray-600">Total</div>
+                                                </div>
+                                                <div className="text-center p-4 bg-white rounded-lg col-span-2">
+                                                    <div className={`text-3xl font-bold ${parseFloat(report.percentage) >= 75 ? 'text-green-600' : 'text-red-600'}`}>
+                                                        {report.percentage}%
+                                                    </div>
+                                                    <div className="text-sm text-gray-600">Percentual de Presença</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+                                
+                                {selectedStudent.exitObservation && (
+                                    <div className="bg-yellow-50 p-4 rounded-lg mb-6 border-2 border-yellow-200">
+                                        <p className="font-bold mb-2">📝 Observações:</p>
+                                        <p className="text-gray-700">{selectedStudent.exitObservation}</p>
+                                    </div>
+                                )}
+                                
+                                <div className="flex gap-3">
+                                    <button onClick={generateHistoryPDF} 
+                                        className="flex-1 bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 transition">
+                                        📄 Gerar PDF
+                                    </button>
+                                    <button onClick={() => setShowReportModal(false)} 
+                                        className="flex-1 bg-gray-200 py-3 rounded-lg font-bold hover:bg-gray-300 transition">
+                                        ❌ Fechar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+        
         // COMPONENTES RESTANTES (SEM ALTERAÇÃO)
         {/* Continua com ConfigModal, UsersModal, ClassesModal e StudentsModal iguais ao original */}
         
@@ -1500,6 +1859,9 @@
             const [name, setName] = useState('');
             const [bulkInput, setBulkInput] = useState('');
             const [showBulkAdd, setShowBulkAdd] = useState(false);
+            const [editingExit, setEditingExit] = useState(null);
+            const [exitDate, setExitDate] = useState(new Date().toISOString().split('T')[0]);
+            const [exitObservation, setExitObservation] = useState('');
             
             const handleAdd = () => {
                 if (!name.trim()) {
@@ -1512,7 +1874,9 @@
                     name: name.trim(),
                     status: 'ativo',
                     attendance: {},
-                    observations: {}
+                    observations: {},
+                    exitDate: null,
+                    exitObservation: ''
                 };
                 
                 setClasses(classes.map(c => 
@@ -1543,7 +1907,9 @@
                     name: studentName,
                     status: 'ativo',
                     attendance: {},
-                    observations: {}
+                    observations: {},
+                    exitDate: null,
+                    exitObservation: ''
                 }));
                 
                 setClasses(classes.map(c => 
@@ -1558,13 +1924,48 @@
             };
             
             const handleStatusChange = (studentId, newStatus) => {
+                // Se mudou para transferido ou falecido, pede data e observação
+                if (newStatus !== 'ativo') {
+                    const student = cls.students.find(s => s.id === studentId);
+                    setEditingExit(studentId);
+                    setExitDate(student.exitDate || new Date().toISOString().split('T')[0]);
+                    setExitObservation(student.exitObservation || '');
+                } else {
+                    // Se voltou para ativo, limpa data e observação
+                    setClasses(classes.map(c =>
+                        c.id === cls.id
+                            ? { ...c, students: c.students.map(s => 
+                                s.id === studentId ? { ...s, status: newStatus, exitDate: null, exitObservation: '' } : s
+                            )}
+                            : c
+                    ));
+                }
+            };
+            
+            const confirmStatusChange = (studentId, newStatus) => {
+                if (!exitDate) {
+                    showToast('Digite a data de saída!', 'error');
+                    return;
+                }
+                
                 setClasses(classes.map(c =>
                     c.id === cls.id
                         ? { ...c, students: c.students.map(s => 
-                            s.id === studentId ? { ...s, status: newStatus } : s
+                            s.id === studentId ? { 
+                                ...s, 
+                                status: newStatus, 
+                                exitDate: exitDate,
+                                exitObservation: exitObservation.trim()
+                            } : s
                         )}
                         : c
                 ));
+                
+                const statusText = newStatus === 'transferido' ? 'Transferência' : 'Falecimento';
+                showToast(`${statusText} registrado com sucesso!`, 'success');
+                setEditingExit(null);
+                setExitDate(new Date().toISOString().split('T')[0]);
+                setExitObservation('');
             };
             
             const handleDelete = (studentId) => {
@@ -1633,19 +2034,85 @@
                                 <p className="text-gray-500 text-center py-4">Nenhum aluno cadastrado</p>
                             ) : (
                                 cls.students.map(s => (
-                                    <div key={s.id} className="flex items-center gap-3 p-4 border-2 rounded-lg bg-white hover:bg-gray-50 transition">
-                                        <span className="flex-1 font-bold text-lg">{s.name}</span>
-                                        <select value={s.status} 
-                                            onChange={(e) => handleStatusChange(s.id, e.target.value)}
-                                            className="px-4 py-2 border-2 rounded-lg focus:border-indigo-500 outline-none bg-white">
-                                            <option value="ativo">✅ Ativo</option>
-                                            <option value="transferido">🔄 Transferido</option>
-                                            <option value="falecido">🕊️ Falecido</option>
-                                        </select>
-                                        <button onClick={() => handleDelete(s.id)} 
-                                            className="text-red-600 px-4 py-2 hover:bg-red-50 rounded-lg font-semibold transition">
-                                            🗑️ Excluir
-                                        </button>
+                                    <div key={s.id} className="border-2 rounded-lg p-4 bg-white hover:bg-gray-50 transition">
+                                        <div className="flex items-center gap-3 mb-2">
+                                            <span className="flex-1 font-bold text-lg">{s.name}</span>
+                                            <select value={s.status} 
+                                                onChange={(e) => handleStatusChange(s.id, e.target.value)}
+                                                disabled={editingExit === s.id}
+                                                className="px-4 py-2 border-2 rounded-lg focus:border-indigo-500 outline-none bg-white">
+                                                <option value="ativo">✅ Ativo</option>
+                                                <option value="transferido">🔄 Transferido</option>
+                                                <option value="falecido">🕊️ Falecido</option>
+                                            </select>
+                                            <button onClick={() => handleDelete(s.id)} 
+                                                className="text-red-600 px-4 py-2 hover:bg-red-50 rounded-lg font-semibold transition">
+                                                🗑️ Excluir
+                                            </button>
+                                        </div>
+                                        
+                                        {/* Formulário de saída quando muda para transferido/falecido */}
+                                        {editingExit === s.id && (
+                                            <div className="mt-3 p-4 bg-yellow-50 rounded-lg border-2 border-yellow-300">
+                                                <h4 className="font-bold mb-3 text-yellow-800">
+                                                    {s.status === 'transferido' ? '🔄 Registrar Transferência' : '🕊️ Registrar Falecimento'}
+                                                </h4>
+                                                
+                                                <div className="space-y-3">
+                                                    <div>
+                                                        <label className="block text-sm font-bold text-gray-700 mb-1">📅 Data:</label>
+                                                        <input 
+                                                            type="date" 
+                                                            value={exitDate}
+                                                            onChange={(e) => setExitDate(e.target.value)}
+                                                            className="w-full px-4 py-2 border-2 rounded-lg focus:border-yellow-500 outline-none"
+                                                        />
+                                                    </div>
+                                                    
+                                                    <div>
+                                                        <label className="block text-sm font-bold text-gray-700 mb-1">📝 Observações (opcional):</label>
+                                                        <textarea 
+                                                            value={exitObservation}
+                                                            onChange={(e) => setExitObservation(e.target.value)}
+                                                            placeholder="Ex: Transferido para Escola Municipal X..."
+                                                            className="w-full px-4 py-2 border-2 rounded-lg focus:border-yellow-500 outline-none resize-none"
+                                                            rows="3"
+                                                        />
+                                                    </div>
+                                                    
+                                                    <div className="flex gap-2">
+                                                        <button 
+                                                            onClick={() => confirmStatusChange(s.id, s.status)}
+                                                            className="flex-1 bg-green-600 text-white py-2 rounded-lg font-bold hover:bg-green-700 transition">
+                                                            ✅ Confirmar
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => {
+                                                                setEditingExit(null);
+                                                                setExitDate(new Date().toISOString().split('T')[0]);
+                                                                setExitObservation('');
+                                                            }}
+                                                            className="flex-1 bg-gray-200 py-2 rounded-lg font-bold hover:bg-gray-300 transition">
+                                                            ❌ Cancelar
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+                                        
+                                        {/* Mostra info de saída se já registrada */}
+                                        {s.status !== 'ativo' && s.exitDate && editingExit !== s.id && (
+                                            <div className="mt-2 p-3 bg-gray-50 rounded border-l-4 border-gray-400">
+                                                <p className="text-sm">
+                                                    <span className="font-semibold">Data de saída:</span> {new Date(s.exitDate + 'T00:00:00').toLocaleDateString('pt-BR')}
+                                                </p>
+                                                {s.exitObservation && (
+                                                    <p className="text-sm mt-1">
+                                                        <span className="font-semibold">Obs:</span> {s.exitObservation}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
                                 ))
                             )}
