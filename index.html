@@ -144,7 +144,8 @@
                 const init = async () => {
                     await loadData();
                     await checkOnlineStatus();
-                    await restoreSession();
+                    // DESABILITADO: await restoreSession(); 
+                    // Sistema não faz mais login automático
                     setIsLoading(false);
                 };
                 init();
@@ -157,17 +158,18 @@
             }, [user, classes, users]);
             
             // Salva sessão sempre que o usuário mudar
-            useEffect(() => {
-                if (user) {
-                    localStorage.setItem('userSession', JSON.stringify({
-                        login: user.login,
-                        role: user.role,
-                        name: user.name,
-                        canEdit: user.canEdit,
-                        canManage: user.canManage
-                    }));
-                }
-            }, [user]);
+            // DESABILITADO: Não salva mais sessão automaticamente
+            // useEffect(() => {
+            //     if (user) {
+            //         localStorage.setItem('userSession', JSON.stringify({
+            //             login: user.login,
+            //             role: user.role,
+            //             name: user.name,
+            //             canEdit: user.canEdit,
+            //             canManage: user.canManage
+            //         }));
+            //     }
+            // }, [user]);
             
             // Função para restaurar sessão
             const restoreSession = async () => {
