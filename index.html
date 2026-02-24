@@ -1967,6 +1967,16 @@ function History({ classes, showToast }) {
                 // Se mudou para transferido ou falecido, pede data e observação
                 if (newStatus !== 'ativo') {
                     const student = cls.students.find(s => s.id === studentId);
+                    
+                    // IMPORTANTE: Já muda o status do aluno agora
+                    setClasses(classes.map(c =>
+                        c.id === cls.id
+                            ? { ...c, students: c.students.map(s => 
+                                s.id === studentId ? { ...s, status: newStatus } : s
+                            )}
+                            : c
+                    ));
+                    
                     setEditingExit(studentId);
                     setExitDate(student.exitDate || new Date().toISOString().split('T')[0]);
                     setExitObservation(student.exitObservation || '');
@@ -1982,18 +1992,20 @@ function History({ classes, showToast }) {
                 }
             };
             
-            const confirmStatusChange = (studentId, newStatus) => {
+            const confirmStatusChange = (studentId) => {
                 if (!exitDate) {
                     showToast('Digite a data de saída!', 'error');
                     return;
                 }
                 
+                // Pega o status atual do aluno (já foi mudado em handleStatusChange)
+                const currentStudent = cls.students.find(s => s.id === studentId);
+                
                 setClasses(classes.map(c =>
                     c.id === cls.id
                         ? { ...c, students: c.students.map(s => 
                             s.id === studentId ? { 
-                                ...s, 
-                                status: newStatus, 
+                                ...s,
                                 exitDate: exitDate,
                                 exitObservation: exitObservation.trim()
                             } : s
@@ -2001,7 +2013,7 @@ function History({ classes, showToast }) {
                         : c
                 ));
                 
-                const statusText = newStatus === 'transferido' ? 'Transferência' : 'Falecimento';
+                const statusText = currentStudent.status === 'transferido' ? 'Transferência' : 'Falecimento';
                 showToast(`${statusText} registrado com sucesso!`, 'success');
                 setEditingExit(null);
                 setExitDate(new Date().toISOString().split('T')[0]);
@@ -2093,10 +2105,16 @@ function History({ classes, showToast }) {
                                         
                                         {/* Formulário de saída quando muda para transferido/falecido */}
                                         {editingExit === s.id && (
-                                            <div className="mt-3 p-4 bg-yellow-50 rounded-lg border-2 border-yellow-300">
-                                                <h4 className="font-bold mb-3 text-yellow-800">
-                                                    {s.status === 'transferido' ? '🔄 Registrar Transferência' : '🕊️ Registrar Falecimento'}
-                                                </h4>
+                                            <div className="mt-3 p-4 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg border-2 border-yellow-400 shadow-lg">
+                                                <div className="flex items-center gap-3 mb-3">
+                                                    <span className="text-3xl">{s.status === 'transferido' ? '🔄' : '🕊️'}</span>
+                                                    <div>
+                                                        <h4 className="font-bold text-yellow-800">
+                                                            {s.status === 'transferido' ? 'Registrar Transferência' : 'Registrar Falecimento'}
+                                                        </h4>
+                                                        <p className="text-sm text-yellow-700">⚠️ Preencha os dados abaixo e clique em Confirmar</p>
+                                                    </div>
+                                                </div>
                                                 
                                                 <div className="space-y-3">
                                                     <div>
@@ -2122,7 +2140,7 @@ function History({ classes, showToast }) {
                                                     
                                                     <div className="flex gap-2">
                                                         <button 
-                                                            onClick={() => confirmStatusChange(s.id, s.status)}
+                                                            onClick={() => confirmStatusChange(s.id)}
                                                             className="flex-1 bg-green-600 text-white py-2 rounded-lg font-bold hover:bg-green-700 transition">
                                                             ✅ Confirmar
                                                         </button>
