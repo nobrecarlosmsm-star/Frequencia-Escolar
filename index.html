@@ -475,7 +475,15 @@
         // canManage controla o botão "Gerenciar Alunos"
         function Frequency({ classes, setClasses, selectedClass, setSelectedClass, selectedDate, setSelectedDate, canEdit, canManage, setShowStudents, showToast }) {
             const cls = classes.find(c => c.id === selectedClass);
-            
+
+            // Mesma lógica de ordenação do StudentsModal: normais alfabético, pós-censo no final
+            const sortedActiveStudents = (students) => {
+                const ativos = students.filter(s => s.status === 'ativo');
+                const normais = ativos.filter(s => !s.posCenso).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+                const pc     = ativos.filter(s =>  s.posCenso).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+                return [...normais, ...pc];
+            };
+
             const handleAttendance = (studentId, status) => {
                 if (!canEdit) return;
                 setClasses(classes.map(c =>
@@ -484,7 +492,25 @@
                         : c
                 ));
             };
-            
+
+            // Desmarcar: remove a chave da data no attendance — apenas admin
+            const handleClear = (studentId) => {
+                if (!canManage) return;
+                setClasses(classes.map(c => {
+                    if (c.id !== selectedClass) return c;
+                    return {
+                        ...c,
+                        students: c.students.map(s => {
+                            if (s.id !== studentId) return s;
+                            const newAtt = { ...s.attendance };
+                            delete newAtt[selectedDate];
+                            return { ...s, attendance: newAtt };
+                        })
+                    };
+                }));
+                showToast('Marcação removida com sucesso!', 'success');
+            };
+
             const handleObservation = (studentId, obs) => {
                 if (!canEdit) return;
                 setClasses(classes.map(c =>
@@ -493,7 +519,7 @@
                         : c
                 ));
             };
-            
+
             return (
                 <div className="space-y-6">
                     <div className="bg-white p-6 rounded-xl shadow-lg">
@@ -513,7 +539,7 @@
                                     className="w-full px-4 py-3 border-2 rounded-lg focus:border-indigo-500 outline-none" />
                             </div>
                         </div>
-                        
+
                         {/* Botão Gerenciar Alunos: apenas admin */}
                         {cls && canManage && (
                             <div className="flex justify-end mb-4">
@@ -524,56 +550,71 @@
                             </div>
                         )}
                     </div>
-                    
+
                     {cls ? (
                         <div className="bg-white p-6 rounded-xl shadow-lg">
                             <h3 className="text-xl font-bold mb-4">👥 Lista de Chamada - {cls.name}</h3>
                             <p className="text-sm text-gray-600 mb-4">
                                 📅 {new Date(selectedDate + 'T00:00:00').toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                             </p>
-                            
+
                             {/* Banner informativo para visualizador */}
                             {!canEdit && (
                                 <div className="mb-4 bg-blue-50 border-2 border-blue-200 rounded-lg px-4 py-3 text-blue-700 text-sm font-semibold">
                                     👁️ Modo visualização — você pode acompanhar a frequência mas não pode editá-la.
                                 </div>
                             )}
-                            
-                            {cls.students.filter(s => s.status === 'ativo').length === 0 ? (
+
+                            {sortedActiveStudents(cls.students).length === 0 ? (
                                 <p className="text-gray-500 text-center py-8">Nenhum aluno ativo nesta turma</p>
                             ) : (
                                 <div className="space-y-3">
-                                    {cls.students.filter(s => s.status === 'ativo').map((student, idx) => (
-                                        <div key={student.id} className="border-2 rounded-lg p-4 hover:bg-gray-50 transition">
-                                            <div className="flex items-center gap-4 mb-3">
-                                                <span className="font-bold text-lg bg-indigo-100 w-10 h-10 rounded-full flex items-center justify-center">{idx + 1}</span>
-                                                <span className="flex-1 font-bold text-lg">{student.name}</span>
-                                                <div className="flex gap-2">
-                                                    <button onClick={() => handleAttendance(student.id, 'presente')} disabled={!canEdit}
-                                                        className={`px-6 py-2 rounded-lg font-bold transition ${student.attendance?.[selectedDate] === 'presente' ? 'bg-green-600 text-white' : 'bg-gray-200 hover:bg-green-100'} ${!canEdit && 'opacity-60 cursor-not-allowed'}`}>
-                                                        ✅ Presente
-                                                    </button>
-                                                    <button onClick={() => handleAttendance(student.id, 'falta')} disabled={!canEdit}
-                                                        className={`px-6 py-2 rounded-lg font-bold transition ${student.attendance?.[selectedDate] === 'falta' ? 'bg-red-600 text-white' : 'bg-gray-200 hover:bg-red-100'} ${!canEdit && 'opacity-60 cursor-not-allowed'}`}>
-                                                        ❌ Falta
-                                                    </button>
-                                                    <button onClick={() => handleAttendance(student.id, 'justificada')} disabled={!canEdit}
-                                                        className={`px-6 py-2 rounded-lg font-bold transition ${student.attendance?.[selectedDate] === 'justificada' ? 'bg-yellow-600 text-white' : 'bg-gray-200 hover:bg-yellow-100'} ${!canEdit && 'opacity-60 cursor-not-allowed'}`}>
-                                                        📝 Justificada
-                                                    </button>
+                                    {sortedActiveStudents(cls.students).map((student, idx) => {
+                                        const marcacao = student.attendance?.[selectedDate];
+                                        const jaMarcado = !!marcacao;
+                                        return (
+                                            <div key={student.id} className={`border-2 rounded-lg p-4 hover:bg-gray-50 transition ${student.posCenso ? 'border-yellow-300 bg-yellow-50' : ''}`}>
+                                                <div className="flex items-center gap-3 mb-3 flex-wrap">
+                                                    <span className="font-bold text-lg bg-indigo-100 w-10 h-10 rounded-full flex items-center justify-center shrink-0">{idx + 1}</span>
+                                                    <span className="flex-1 font-bold text-lg">
+                                                        {student.name}
+                                                        {student.posCenso && <span className="ml-2 text-xs bg-yellow-500 text-white px-2 py-0.5 rounded-full">PÓS-CENSO</span>}
+                                                    </span>
+                                                    <div className="flex gap-2 flex-wrap">
+                                                        <button onClick={() => handleAttendance(student.id, 'presente')} disabled={!canEdit}
+                                                            className={`px-5 py-2 rounded-lg font-bold transition ${marcacao === 'presente' ? 'bg-green-600 text-white ring-2 ring-green-400' : 'bg-gray-200 hover:bg-green-100'} ${!canEdit && 'opacity-60 cursor-not-allowed'}`}>
+                                                            ✅ Presente
+                                                        </button>
+                                                        <button onClick={() => handleAttendance(student.id, 'falta')} disabled={!canEdit}
+                                                            className={`px-5 py-2 rounded-lg font-bold transition ${marcacao === 'falta' ? 'bg-red-600 text-white ring-2 ring-red-400' : 'bg-gray-200 hover:bg-red-100'} ${!canEdit && 'opacity-60 cursor-not-allowed'}`}>
+                                                            ❌ Falta
+                                                        </button>
+                                                        <button onClick={() => handleAttendance(student.id, 'justificada')} disabled={!canEdit}
+                                                            className={`px-5 py-2 rounded-lg font-bold transition ${marcacao === 'justificada' ? 'bg-yellow-600 text-white ring-2 ring-yellow-400' : 'bg-gray-200 hover:bg-yellow-100'} ${!canEdit && 'opacity-60 cursor-not-allowed'}`}>
+                                                            📝 Justificada
+                                                        </button>
+                                                        {/* Botão desmarcar: só aparece para admin E quando há algo marcado */}
+                                                        {canManage && jaMarcado && (
+                                                            <button onClick={() => handleClear(student.id)}
+                                                                title="Remover marcação desta data"
+                                                                className="px-4 py-2 rounded-lg font-bold bg-gray-100 text-gray-500 border-2 border-dashed border-gray-400 hover:bg-gray-200 hover:text-gray-700 transition">
+                                                                🚫 Desmarcar
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm font-semibold text-gray-700 mb-1">📝 Observações:</label>
+                                                    <textarea value={student.observations?.[selectedDate] || ''}
+                                                        onChange={(e) => handleObservation(student.id, e.target.value)}
+                                                        disabled={!canEdit}
+                                                        placeholder={canEdit ? "Adicione observações sobre o aluno..." : "Sem observações"}
+                                                        className={`w-full px-3 py-2 border-2 rounded-lg focus:border-indigo-500 outline-none resize-none ${!canEdit && 'bg-gray-50 cursor-not-allowed'}`}
+                                                        rows="2"></textarea>
                                                 </div>
                                             </div>
-                                            <div>
-                                                <label className="block text-sm font-semibold text-gray-700 mb-1">📝 Observações:</label>
-                                                <textarea value={student.observations?.[selectedDate] || ''}
-                                                    onChange={(e) => handleObservation(student.id, e.target.value)}
-                                                    disabled={!canEdit}
-                                                    placeholder={canEdit ? "Adicione observações sobre o aluno..." : "Sem observações"}
-                                                    className={`w-full px-3 py-2 border-2 rounded-lg focus:border-indigo-500 outline-none resize-none ${!canEdit && 'bg-gray-50 cursor-not-allowed'}`}
-                                                    rows="2"></textarea>
-                                            </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             )}
                         </div>
@@ -594,9 +635,12 @@
             const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
             const [selectedStudent, setSelectedStudent] = useState(null);
             const [showStudentModal, setShowStudentModal] = useState(false);
-            
+            const [expandedStudent, setExpandedStudent] = useState(null);
+
             const cls = classes.find(c => c.id === selectedClass);
-            
+
+            const fmtDate = (iso) => new Date(iso + 'T00:00:00').toLocaleDateString('pt-BR');
+
             const generateReport = () => {
                 if (!cls) return null;
                 const start = new Date(startDate + 'T00:00:00');
@@ -605,15 +649,16 @@
                 for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) days.push(d.toISOString().split('T')[0]);
                 return cls.students.filter(s => s.status === 'ativo').map(student => {
                     let presente = 0, falta = 0, justificada = 0;
+                    const faltaDates = [], justificadaDates = [];
                     days.forEach(day => {
                         const att = student.attendance?.[day];
                         if (att === 'presente') presente++;
-                        else if (att === 'falta') falta++;
-                        else if (att === 'justificada') justificada++;
+                        else if (att === 'falta') { falta++; faltaDates.push(day); }
+                        else if (att === 'justificada') { justificada++; justificadaDates.push(day); }
                     });
                     const total = presente + falta + justificada;
                     const percentage = total > 0 ? ((presente / total) * 100).toFixed(1) : 0;
-                    return { student, presente, falta, justificada, total, percentage, days };
+                    return { student, presente, falta, justificada, total, percentage, days, faltaDates, justificadaDates };
                 });
             };
             
@@ -625,22 +670,74 @@
                 if (!studentData) return;
                 const { jsPDF } = window.jspdf;
                 const doc = new jsPDF();
-                doc.setFontSize(20); doc.setFont(undefined, 'bold');
-                doc.text('Relatório Individual de Frequência', 105, 20, { align: 'center' });
-                doc.setFontSize(12); doc.setFont(undefined, 'normal');
-                doc.text(`Turma: ${cls.name}`, 20, 35);
-                doc.text(`Período: ${new Date(startDate + 'T00:00:00').toLocaleDateString('pt-BR')} a ${new Date(endDate + 'T00:00:00').toLocaleDateString('pt-BR')}`, 20, 42);
-                doc.setFontSize(16); doc.setFont(undefined, 'bold');
-                doc.text(`Aluno: ${studentData.student.name}`, 20, 55);
-                doc.setFontSize(12); doc.setFont(undefined, 'normal');
-                doc.text(`Presenças: ${studentData.presente}`, 20, 70);
-                doc.text(`Faltas: ${studentData.falta}`, 20, 77);
-                doc.text(`Justificadas: ${studentData.justificada}`, 20, 84);
-                doc.text(`Total de Aulas: ${studentData.total}`, 20, 91);
-                doc.text(`Percentual de Presença: ${studentData.percentage}%`, 20, 98);
-                const status = parseFloat(studentData.percentage) >= 75 ? 'APROVADO' : 'REPROVADO por falta';
+
+                doc.setFontSize(18); doc.setFont(undefined, 'bold');
+                doc.text('Relatório Individual de Frequência', 105, 18, { align: 'center' });
+                doc.setFontSize(11); doc.setFont(undefined, 'normal');
+                doc.text(`Turma: ${cls.name}`, 20, 30);
+                doc.text(`Período: ${fmtDate(startDate)} a ${fmtDate(endDate)}`, 20, 37);
                 doc.setFontSize(14); doc.setFont(undefined, 'bold');
-                doc.text(`Situação: ${status}`, 20, 110);
+                doc.text(`Aluno: ${studentData.student.name}`, 20, 48);
+
+                // Resumo
+                doc.setFontSize(11); doc.setFont(undefined, 'normal');
+                doc.text(`Presenças: ${studentData.presente}`, 20, 60);
+                doc.text(`Faltas: ${studentData.falta}`, 20, 67);
+                doc.text(`Justificadas: ${studentData.justificada}`, 20, 74);
+                doc.text(`Total de Aulas Registradas: ${studentData.total}`, 20, 81);
+                doc.text(`Percentual de Presença: ${studentData.percentage}%`, 20, 88);
+                const status = parseFloat(studentData.percentage) >= 75 ? 'APROVADO' : 'REPROVADO por falta';
+                doc.setFontSize(13); doc.setFont(undefined, 'bold');
+                doc.setTextColor(parseFloat(studentData.percentage) >= 75 ? 0 : 200, parseFloat(studentData.percentage) >= 75 ? 140 : 0, 0);
+                doc.text(`Situação: ${status}`, 20, 98);
+                doc.setTextColor(0, 0, 0);
+
+                let curY = 112;
+
+                // Tabela de datas de faltas
+                if (studentData.faltaDates.length > 0) {
+                    doc.setFontSize(12); doc.setFont(undefined, 'bold');
+                    doc.setTextColor(200, 0, 0);
+                    doc.text(`❌ Datas de Falta (${studentData.faltaDates.length}):`, 20, curY);
+                    doc.setTextColor(0, 0, 0);
+                    curY += 6;
+                    const faltaRows = studentData.faltaDates.map((d, i) => [i + 1, fmtDate(d)]);
+                    doc.autoTable({
+                        startY: curY,
+                        head: [['#', 'Data']],
+                        body: faltaRows,
+                        theme: 'grid',
+                        headStyles: { fillColor: [220, 53, 69], fontSize: 9, fontStyle: 'bold' },
+                        styles: { fontSize: 9, cellPadding: 2 },
+                        columnStyles: { 0: { cellWidth: 15, halign: 'center' }, 1: { cellWidth: 45 } },
+                        margin: { left: 20 },
+                        tableWidth: 60
+                    });
+                    curY = doc.lastAutoTable.finalY + 8;
+                }
+
+                // Tabela de datas justificadas
+                if (studentData.justificadaDates.length > 0) {
+                    if (curY > 240) { doc.addPage(); curY = 20; }
+                    doc.setFontSize(12); doc.setFont(undefined, 'bold');
+                    doc.setTextColor(180, 120, 0);
+                    doc.text(`📝 Datas Justificadas (${studentData.justificadaDates.length}):`, 20, curY);
+                    doc.setTextColor(0, 0, 0);
+                    curY += 6;
+                    const justRows = studentData.justificadaDates.map((d, i) => [i + 1, fmtDate(d)]);
+                    doc.autoTable({
+                        startY: curY,
+                        head: [['#', 'Data']],
+                        body: justRows,
+                        theme: 'grid',
+                        headStyles: { fillColor: [202, 138, 4], fontSize: 9, fontStyle: 'bold' },
+                        styles: { fontSize: 9, cellPadding: 2 },
+                        columnStyles: { 0: { cellWidth: 15, halign: 'center' }, 1: { cellWidth: 45 } },
+                        margin: { left: 20 },
+                        tableWidth: 60
+                    });
+                }
+
                 doc.save(`relatorio_${studentData.student.name.replace(/\s/g, '_')}.pdf`);
                 showToast('PDF Individual gerado com sucesso!', 'success');
                 setShowStudentModal(false);
@@ -649,19 +746,64 @@
             const generateClassPDF = () => {
                 if (!report) return;
                 const { jsPDF } = window.jspdf;
-                const doc = new jsPDF();
-                doc.setFontSize(18); doc.setFont(undefined, 'bold');
-                doc.text('Relatório de Frequência da Turma', 105, 15, { align: 'center' });
-                doc.setFontSize(11); doc.setFont(undefined, 'normal');
-                doc.text(`Turma: ${cls.name}`, 105, 23, { align: 'center' });
-                doc.text(`Período: ${new Date(startDate + 'T00:00:00').toLocaleDateString('pt-BR')} a ${new Date(endDate + 'T00:00:00').toLocaleDateString('pt-BR')}`, 105, 29, { align: 'center' });
-                const tableData = report.map((r, idx) => [idx + 1, r.student.name, r.presente, r.falta, r.justificada, r.total, `${r.percentage}%`]);
-                doc.autoTable({ startY: 35, head: [['#', 'Aluno', 'Presenças', 'Faltas', 'Justificadas', 'Total', '% Presença']], body: tableData, theme: 'grid', headStyles: { fillColor: [91, 95, 199], fontSize: 10, fontStyle: 'bold' }, styles: { fontSize: 9, cellPadding: 3 } });
-                const finalY = doc.lastAutoTable.finalY + 10;
-                doc.setFontSize(10);
-                doc.text(`Total de Presenças: ${report.reduce((sum, r) => sum + r.presente, 0)}`, 20, finalY);
-                doc.text(`Total de Faltas: ${report.reduce((sum, r) => sum + r.falta, 0)}`, 20, finalY + 6);
-                doc.text(`Total de Justificadas: ${report.reduce((sum, r) => sum + r.justificada, 0)}`, 20, finalY + 12);
+                const doc = new jsPDF({ orientation: 'landscape' });
+
+                doc.setFontSize(16); doc.setFont(undefined, 'bold');
+                doc.text('Relatório de Frequência da Turma', 148, 14, { align: 'center' });
+                doc.setFontSize(10); doc.setFont(undefined, 'normal');
+                doc.text(`Turma: ${cls.name}     Período: ${fmtDate(startDate)} a ${fmtDate(endDate)}`, 148, 22, { align: 'center' });
+
+                const tableData = report.map((r, idx) => [
+                    idx + 1,
+                    r.student.name,
+                    r.presente,
+                    r.falta,
+                    r.faltaDates.length > 0 ? r.faltaDates.map(d => fmtDate(d)).join(', ') : '-',
+                    r.justificada,
+                    r.justificadaDates.length > 0 ? r.justificadaDates.map(d => fmtDate(d)).join(', ') : '-',
+                    r.total,
+                    `${r.percentage}%`
+                ]);
+
+                doc.autoTable({
+                    startY: 27,
+                    head: [['#', 'Aluno', 'Pres.', 'Faltas', 'Datas das Faltas', 'Just.', 'Datas Justificadas', 'Total', '%']],
+                    body: tableData,
+                    theme: 'grid',
+                    headStyles: { fillColor: [91, 95, 199], fontSize: 8, fontStyle: 'bold' },
+                    styles: { fontSize: 7.5, cellPadding: 2.5, overflow: 'linebreak' },
+                    columnStyles: {
+                        0: { cellWidth: 8, halign: 'center' },
+                        1: { cellWidth: 48 },
+                        2: { cellWidth: 12, halign: 'center' },
+                        3: { cellWidth: 12, halign: 'center' },
+                        4: { cellWidth: 55 },
+                        5: { cellWidth: 12, halign: 'center' },
+                        6: { cellWidth: 55 },
+                        7: { cellWidth: 12, halign: 'center' },
+                        8: { cellWidth: 16, halign: 'center' }
+                    },
+                    didParseCell: (data) => {
+                        if (data.column.index === 3 && data.section === 'body') {
+                            const val = parseInt(data.cell.raw);
+                            if (val > 0) data.cell.styles.textColor = [200, 0, 0];
+                        }
+                        if (data.column.index === 5 && data.section === 'body') {
+                            const val = parseInt(data.cell.raw);
+                            if (val > 0) data.cell.styles.textColor = [150, 100, 0];
+                        }
+                        if (data.column.index === 8 && data.section === 'body') {
+                            const val = parseFloat(data.cell.raw);
+                            data.cell.styles.textColor = val >= 75 ? [0, 140, 0] : [200, 0, 0];
+                            data.cell.styles.fontStyle = 'bold';
+                        }
+                    }
+                });
+
+                const finalY = doc.lastAutoTable.finalY + 8;
+                doc.setFontSize(9);
+                doc.text(`Total de Presenças: ${report.reduce((sum, r) => sum + r.presente, 0)}   |   Total de Faltas: ${report.reduce((sum, r) => sum + r.falta, 0)}   |   Total de Justificadas: ${report.reduce((sum, r) => sum + r.justificada, 0)}`, 20, finalY);
+
                 doc.save(`relatorio_turma_${cls.name.replace(/\s/g, '_')}.pdf`);
                 showToast('PDF da Turma gerado com sucesso!', 'success');
             };
@@ -842,42 +984,79 @@
                             <div className="text-center mb-6">
                                 <h3 className="text-2xl font-bold">Relatório de Frequência</h3>
                                 <p className="text-gray-600 mt-2">{cls.name}</p>
-                                <p className="text-sm text-gray-500">Período: {new Date(startDate + 'T00:00:00').toLocaleDateString('pt-BR')} a {new Date(endDate + 'T00:00:00').toLocaleDateString('pt-BR')}</p>
+                                <p className="text-sm text-gray-500">Período: {fmtDate(startDate)} a {fmtDate(endDate)}</p>
                             </div>
-                            <div className="overflow-x-auto">
-                                <table className="w-full border-collapse">
-                                    <thead>
-                                        <tr className="bg-indigo-600 text-white">
-                                            <th className="border-2 border-indigo-700 p-3 text-left">#</th>
-                                            <th className="border-2 border-indigo-700 p-3 text-left">Aluno</th>
-                                            <th className="border-2 border-indigo-700 p-3 text-center">✅ Presenças</th>
-                                            <th className="border-2 border-indigo-700 p-3 text-center">❌ Faltas</th>
-                                            <th className="border-2 border-indigo-700 p-3 text-center">📝 Justificadas</th>
-                                            <th className="border-2 border-indigo-700 p-3 text-center">📊 Total</th>
-                                            <th className="border-2 border-indigo-700 p-3 text-center">% Presença</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {report.map((r, idx) => (
-                                            <tr key={r.student.id} className="hover:bg-gray-50">
-                                                <td className="border-2 p-3 font-bold">{idx + 1}</td>
-                                                <td className="border-2 p-3 font-semibold">{r.student.name}</td>
-                                                <td className="border-2 p-3 text-center text-green-600 font-bold">{r.presente}</td>
-                                                <td className="border-2 p-3 text-center text-red-600 font-bold">{r.falta}</td>
-                                                <td className="border-2 p-3 text-center text-yellow-600 font-bold">{r.justificada}</td>
-                                                <td className="border-2 p-3 text-center font-bold">{r.total}</td>
-                                                <td className="border-2 p-3 text-center">
-                                                    <span className={`font-bold ${r.percentage >= 75 ? 'text-green-600' : 'text-red-600'}`}>{r.percentage}%</span>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                            <div className="space-y-3">
+                                {report.map((r, idx) => (
+                                    <div key={r.student.id} className="border-2 rounded-xl overflow-hidden">
+                                        {/* Linha principal */}
+                                        <div
+                                            className={`flex items-center gap-3 p-4 cursor-pointer hover:bg-gray-50 transition ${expandedStudent === r.student.id ? 'bg-indigo-50 border-b-2 border-indigo-200' : ''}`}
+                                            onClick={() => setExpandedStudent(expandedStudent === r.student.id ? null : r.student.id)}
+                                        >
+                                            <span className="font-bold text-sm bg-indigo-100 w-8 h-8 rounded-full flex items-center justify-center shrink-0">{idx + 1}</span>
+                                            <span className="flex-1 font-bold text-base">{r.student.name}</span>
+                                            <div className="flex items-center gap-4 text-sm">
+                                                <span className="text-green-600 font-bold">✅ {r.presente}</span>
+                                                <span className="text-red-600 font-bold">❌ {r.falta}</span>
+                                                <span className="text-yellow-600 font-bold">📝 {r.justificada}</span>
+                                                <span className="text-gray-500">Total: {r.total}</span>
+                                                <span className={`font-bold text-base px-3 py-1 rounded-full ${parseFloat(r.percentage) >= 75 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                                    {r.percentage}%
+                                                </span>
+                                                <span className="text-gray-400 text-lg">{expandedStudent === r.student.id ? '▲' : '▼'}</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Detalhes expandidos */}
+                                        {expandedStudent === r.student.id && (
+                                            <div className="p-4 bg-gray-50 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                {/* Faltas */}
+                                                <div className="bg-white rounded-lg border-2 border-red-100 p-4">
+                                                    <h4 className="font-bold text-red-600 mb-3 flex items-center gap-2">
+                                                        ❌ Datas de Falta
+                                                        <span className="bg-red-100 text-red-700 text-xs px-2 py-0.5 rounded-full">{r.faltaDates.length}</span>
+                                                    </h4>
+                                                    {r.faltaDates.length === 0 ? (
+                                                        <p className="text-sm text-gray-400 italic">Nenhuma falta no período</p>
+                                                    ) : (
+                                                        <div className="flex flex-wrap gap-2">
+                                                            {r.faltaDates.map(d => (
+                                                                <span key={d} className="bg-red-50 border border-red-200 text-red-700 text-xs font-semibold px-3 py-1.5 rounded-lg">
+                                                                    {fmtDate(d)}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {/* Justificadas */}
+                                                <div className="bg-white rounded-lg border-2 border-yellow-100 p-4">
+                                                    <h4 className="font-bold text-yellow-600 mb-3 flex items-center gap-2">
+                                                        📝 Datas Justificadas
+                                                        <span className="bg-yellow-100 text-yellow-700 text-xs px-2 py-0.5 rounded-full">{r.justificadaDates.length}</span>
+                                                    </h4>
+                                                    {r.justificadaDates.length === 0 ? (
+                                                        <p className="text-sm text-gray-400 italic">Nenhuma justificada no período</p>
+                                                    ) : (
+                                                        <div className="flex flex-wrap gap-2">
+                                                            {r.justificadaDates.map(d => (
+                                                                <span key={d} className="bg-yellow-50 border border-yellow-200 text-yellow-700 text-xs font-semibold px-3 py-1.5 rounded-lg">
+                                                                    {fmtDate(d)}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
                             </div>
-                            <div className="mt-6 text-sm text-gray-600">
-                                <p>✅ Total de Presenças: {report.reduce((sum, r) => sum + r.presente, 0)}</p>
-                                <p>❌ Total de Faltas: {report.reduce((sum, r) => sum + r.falta, 0)}</p>
-                                <p>📝 Total de Justificadas: {report.reduce((sum, r) => sum + r.justificada, 0)}</p>
+                            <div className="mt-6 flex gap-6 text-sm text-gray-600 flex-wrap">
+                                <span>✅ Total de Presenças: <strong>{report.reduce((sum, r) => sum + r.presente, 0)}</strong></span>
+                                <span>❌ Total de Faltas: <strong>{report.reduce((sum, r) => sum + r.falta, 0)}</strong></span>
+                                <span>📝 Total de Justificadas: <strong>{report.reduce((sum, r) => sum + r.justificada, 0)}</strong></span>
                             </div>
                         </div>
                     ) : (
