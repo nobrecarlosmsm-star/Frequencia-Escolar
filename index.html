@@ -143,12 +143,19 @@
                 const savedSession = localStorage.getItem('userSession');
                 if (!savedSession) return;
                 try {
-                    const userData = JSON.parse(savedSession);
+                    const sessionData = JSON.parse(savedSession);
                     if (CloudSync.getKey()) {
                         const cloudData = await CloudSync.load();
                         if (cloudData && cloudData.users) {
-                            const cloudUser = cloudData.users[userData.login];
+                            const cloudUser = cloudData.users[sessionData.login];
                             if (cloudUser) {
+                                // Sempre recalcula canEdit e canManage pelo role atual da nuvem
+                                const userData = {
+                                    login: sessionData.login,
+                                    ...cloudUser,
+                                    canEdit: cloudUser.role === 'admin' || cloudUser.role === 'editor',
+                                    canManage: cloudUser.role === 'admin'
+                                };
                                 setUser(userData);
                                 setUsers(cloudData.users);
                                 setClasses(cloudData.classes || []);
@@ -157,6 +164,12 @@
                             }
                         }
                     }
+                    // Sem nuvem: recalcula pelo role salvo localmente
+                    const userData = {
+                        ...sessionData,
+                        canEdit: sessionData.role === 'admin' || sessionData.role === 'editor',
+                        canManage: sessionData.role === 'admin'
+                    };
                     setUser(userData);
                 } catch (e) {
                     localStorage.removeItem('userSession');
