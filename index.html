@@ -8,7 +8,6 @@
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <!-- ADICIONADO: Bibliotecas para PDF -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
     <style>
@@ -30,22 +29,18 @@
         const ATTENDANCE_STATUS = { PRESENTE: 'presente', FALTA: 'falta', JUSTIFICADA: 'justificada' };
         const API_URL = 'https://api.jsonbin.io/v3';
         
-        // SUAS CHAVES CONFIGURADAS
         const SHARED_CONFIG = {
             apiKey: '$2a$10$LVhD8Cj/YDHnZ.LAXI5.Le3VqZCMWJ0BXMs8konXq0FsxfdfRarOe',
             binId: '698dac12d0ea881f40b4991f'
         };
         
-        // Toast notification component
         function Toast({ message, type = 'success', onClose }) {
             useEffect(() => {
                 const timer = setTimeout(onClose, 3000);
                 return () => clearTimeout(timer);
             }, []);
-            
             const bgColor = type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500';
             const icon = type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️';
-            
             return (
                 <div className={`fixed top-4 right-4 ${bgColor} text-white px-6 py-4 rounded-lg shadow-2xl z-50 toast flex items-center gap-3`}>
                     <span className="text-2xl">{icon}</span>
@@ -55,33 +50,19 @@
         }
         
         class CloudSync {
-            static getKey() { 
-                return SHARED_CONFIG.apiKey || localStorage.getItem('jsonbin_api_key') || ''; 
-            }
-            
-            static getBinId() {
-                return SHARED_CONFIG.binId || localStorage.getItem('syncBinId') || '';
-            }
-            
+            static getKey() { return SHARED_CONFIG.apiKey || localStorage.getItem('jsonbin_api_key') || ''; }
+            static getBinId() { return SHARED_CONFIG.binId || localStorage.getItem('syncBinId') || ''; }
             static async checkConnection() {
                 try {
-                    const response = await fetch('https://www.google.com/favicon.ico', { 
-                        mode: 'no-cors',
-                        cache: 'no-cache'
-                    });
+                    await fetch('https://www.google.com/favicon.ico', { mode: 'no-cors', cache: 'no-cache' });
                     return true;
-                } catch {
-                    return false;
-                }
+                } catch { return false; }
             }
-            
             static async save(data) {
                 const key = this.getKey();
                 if (!key) return { success: false, error: 'Chave da API não configurada' };
-                
                 const isOnline = await this.checkConnection();
                 if (!isOnline) return { success: false, error: 'Sem conexão com a internet' };
-                
                 try {
                     const binId = this.getBinId();
                     const url = binId ? `${API_URL}/b/${binId}` : `${API_URL}/b`;
@@ -94,27 +75,18 @@
                     const result = await res.json();
                     if (result.metadata?.id && !SHARED_CONFIG.binId) {
                         localStorage.setItem('syncBinId', result.metadata.id);
-                        console.log('🔑 IMPORTANTE: Adicione este BIN ID no código:');
-                        console.log('binId: "' + result.metadata.id + '"');
                     }
                     return { success: true, binId: result.metadata?.id };
-                } catch (error) { 
-                    return { success: false, error: error.message }; 
-                }
+                } catch (error) { return { success: false, error: error.message }; }
             }
-            
             static async load() {
                 const key = this.getKey();
                 const binId = this.getBinId();
                 if (!key || !binId) return null;
-                
                 const isOnline = await this.checkConnection();
                 if (!isOnline) return null;
-                
                 try {
-                    const res = await fetch(`${API_URL}/b/${binId}/latest`, {
-                        headers: { 'X-Master-Key': key }
-                    });
+                    const res = await fetch(`${API_URL}/b/${binId}/latest`, { headers: { 'X-Master-Key': key } });
                     if (!res.ok) return null;
                     const result = await res.json();
                     return result.record;
@@ -139,12 +111,11 @@
             const [isOnline, setIsOnline] = useState(true);
             const [isLoading, setIsLoading] = useState(true);
             
-            // Carrega dados e restaura sessão ao iniciar
-            useEffect(() => { 
+            useEffect(() => {
                 const init = async () => {
                     await loadData();
                     await checkOnlineStatus();
-                    await restoreSession(); // REATIVADO: Login automático
+                    await restoreSession();
                     setIsLoading(false);
                 };
                 init();
@@ -156,7 +127,6 @@
                 return () => clearInterval(interval);
             }, [user, classes, users]);
             
-            // Salva sessão sempre que o usuário mudar
             useEffect(() => {
                 if (user) {
                     localStorage.setItem('userSession', JSON.stringify({
@@ -169,21 +139,16 @@
                 }
             }, [user]);
             
-            // Função para restaurar sessão
             const restoreSession = async () => {
                 const savedSession = localStorage.getItem('userSession');
                 if (!savedSession) return;
-                
                 try {
                     const userData = JSON.parse(savedSession);
-                    
-                    // Se tem chave da API, verifica se usuário ainda existe na nuvem
                     if (CloudSync.getKey()) {
                         const cloudData = await CloudSync.load();
                         if (cloudData && cloudData.users) {
                             const cloudUser = cloudData.users[userData.login];
                             if (cloudUser) {
-                                // Usuário ainda existe, restaura a sessão
                                 setUser(userData);
                                 setUsers(cloudData.users);
                                 setClasses(cloudData.classes || []);
@@ -192,11 +157,8 @@
                             }
                         }
                     }
-                    
-                    // Se não conseguiu validar na nuvem mas tem sessão, restaura localmente
                     setUser(userData);
                 } catch (e) {
-                    console.error('Erro ao restaurar sessão:', e);
                     localStorage.removeItem('userSession');
                 }
             };
@@ -206,9 +168,7 @@
                 setIsOnline(online);
             };
             
-            const showToast = (message, type = 'success') => {
-                setToast({ message, type });
-            };
+            const showToast = (message, type = 'success') => setToast({ message, type });
             
             const loadData = async () => {
                 const cloud = await CloudSync.load();
@@ -222,20 +182,13 @@
             const autoSync = async () => {
                 if (!CloudSync.getKey()) return;
                 const result = await CloudSync.save({ classes, users });
-                if (result.success) {
-                    setLastSync(new Date().toISOString());
-                    setIsOnline(true);
-                } else {
-                    setIsOnline(false);
-                }
+                if (result.success) { setLastSync(new Date().toISOString()); setIsOnline(true); }
+                else { setIsOnline(false); }
             };
             
-            // Sincroniza sempre que houver mudanças nos usuários ou turmas
             useEffect(() => {
                 if (user && CloudSync.getKey()) {
-                    const syncTimer = setTimeout(() => {
-                        autoSync();
-                    }, 2000);
+                    const syncTimer = setTimeout(() => autoSync(), 2000);
                     return () => clearTimeout(syncTimer);
                 }
             }, [users, classes]);
@@ -243,33 +196,20 @@
             const manualSync = async () => {
                 setSyncing(true);
                 await checkOnlineStatus();
-                
-                if (!isOnline) {
-                    showToast('Sem conexão com a internet!', 'error');
-                    setSyncing(false);
-                    return;
-                }
-                
-                if (!CloudSync.getKey()) {
-                    showToast('Configure a chave da API primeiro!', 'error');
-                    setSyncing(false);
-                    return;
-                }
-                
+                if (!isOnline) { showToast('Sem conexão com a internet!', 'error'); setSyncing(false); return; }
+                if (!CloudSync.getKey()) { showToast('Configure a chave da API primeiro!', 'error'); setSyncing(false); return; }
                 const result = await CloudSync.save({ classes, users });
-                
                 if (result.success) {
                     setLastSync(new Date().toISOString());
                     if (result.binId && !SHARED_CONFIG.binId) {
                         showToast('✅ Sincronizado! IMPORTANTE: Veja o console para o BIN ID', 'success');
-                        alert(`🔑 IMPORTANTE!\n\nSeu BIN ID foi gerado:\n${result.binId}\n\n1. Abra o arquivo HTML em um editor\n2. Encontre SHARED_CONFIG\n3. Cole este ID em binId: '${result.binId}'\n4. Salve e compartilhe o arquivo!\n\nAssim todos acessarão os mesmos dados!`);
+                        alert(`🔑 IMPORTANTE!\n\nSeu BIN ID foi gerado:\n${result.binId}\n\nAdicione em SHARED_CONFIG no código!`);
                     } else {
                         showToast('Dados sincronizados com sucesso!', 'success');
                     }
                 } else {
                     showToast(`Erro na sincronização: ${result.error}`, 'error');
                 }
-                
                 setTimeout(() => setSyncing(false), 1000);
             };
             
@@ -278,15 +218,9 @@
                 const fd = new FormData(e.target);
                 const login = fd.get('login');
                 const pass = fd.get('password');
-                
                 await checkOnlineStatus();
-                
                 if (CloudSync.getKey()) {
-                    if (!isOnline) {
-                        showToast('Sem conexão com a internet! É necessário estar online para fazer login.', 'error');
-                        return;
-                    }
-                    
+                    if (!isOnline) { showToast('Sem conexão com a internet! É necessário estar online para fazer login.', 'error'); return; }
                     const cloudData = await CloudSync.load();
                     if (cloudData) {
                         const cloudUsers = cloudData.users || DEFAULT_USERS;
@@ -295,48 +229,25 @@
                             setUsers(cloudUsers);
                             setClasses(cloudData.classes || []);
                             setLastSync(cloudData.lastSync);
-                            
-                            const userData = { 
-                                login, 
-                                ...u, 
-                                canEdit: u.role === 'admin' || u.role === 'editor',
-                                canManage: u.role === 'admin'
-                            };
-                            
+                            const userData = { login, ...u, canEdit: u.role === 'admin' || u.role === 'editor', canManage: u.role === 'admin' };
                             setUser(userData);
                             showToast(`Bem-vindo, ${u.name}!`, 'success');
-                        } else {
-                            showToast('Login ou senha incorretos!', 'error');
-                        }
+                        } else { showToast('Login ou senha incorretos!', 'error'); }
                     } else {
                         const u = users[login];
                         if (u && u.password === pass) {
-                            const userData = { 
-                                login, 
-                                ...u, 
-                                canEdit: u.role === 'admin' || u.role === 'editor',
-                                canManage: u.role === 'admin'
-                            };
+                            const userData = { login, ...u, canEdit: u.role === 'admin' || u.role === 'editor', canManage: u.role === 'admin' };
                             setUser(userData);
                             showToast(`Bem-vindo, ${u.name}!`, 'success');
-                        } else {
-                            showToast('Não foi possível carregar os dados da nuvem. Verifique sua chave da API.', 'error');
-                        }
+                        } else { showToast('Não foi possível carregar os dados da nuvem.', 'error'); }
                     }
                 } else {
                     const u = users[login];
                     if (u && u.password === pass) {
-                        const userData = { 
-                            login, 
-                            ...u, 
-                            canEdit: u.role === 'admin' || u.role === 'editor',
-                            canManage: u.role === 'admin'
-                        };
+                        const userData = { login, ...u, canEdit: u.role === 'admin' || u.role === 'editor', canManage: u.role === 'admin' };
                         setUser(userData);
                         showToast(`Bem-vindo, ${u.name}!`, 'success');
-                    } else {
-                        showToast('Login ou senha incorretos!', 'error');
-                    }
+                    } else { showToast('Login ou senha incorretos!', 'error'); }
                 }
             };
             
@@ -346,7 +257,6 @@
                 showToast('Logout realizado com sucesso!', 'success');
             };
             
-            // Tela de carregamento enquanto verifica sessão
             if (isLoading) {
                 return (
                     <div className="min-h-screen header-gradient flex items-center justify-center">
@@ -368,9 +278,7 @@
                                     <h1 className="text-4xl font-bold text-indigo-600 mb-2">📚 Frequência Escolar</h1>
                                     <p className="text-gray-600">Sistema de Controle de Frequência</p>
                                     {!isOnline && (
-                                        <div className="mt-4 bg-red-100 text-red-700 px-4 py-2 rounded-lg text-sm">
-                                            ⚠️ Sem conexão com a internet
-                                        </div>
+                                        <div className="mt-4 bg-red-100 text-red-700 px-4 py-2 rounded-lg text-sm">⚠️ Sem conexão com a internet</div>
                                     )}
                                 </div>
                                 <form onSubmit={handleLogin} className="space-y-4">
@@ -382,9 +290,7 @@
                                         <label className="block text-sm font-semibold text-gray-700 mb-2">🔒 Senha</label>
                                         <input name="password" type="password" className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-indigo-500 outline-none" required />
                                     </div>
-                                    <button type="submit" className="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 transition">
-                                        ENTRAR
-                                    </button>
+                                    <button type="submit" className="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 transition">ENTRAR</button>
                                 </form>
                             </div>
                         </div>
@@ -393,6 +299,7 @@
             }
             
             const cls = classes.find(c => c.id === selectedClass);
+            const roleLabel = user.role === 'admin' ? 'Administrador' : user.role === 'editor' ? 'Editor' : 'Visualizador';
             
             return (
                 <div className="min-h-screen">
@@ -403,14 +310,10 @@
                             <div className="flex items-center justify-between mb-4">
                                 <div>
                                     <h1 className="text-3xl font-bold">📚 Frequência Escolar</h1>
-                                    <p className="text-indigo-200 mt-1">👤 {user.name} ({user.role === 'admin' ? 'Administrador' : user.role === 'editor' ? 'Editor' : 'Visualizador'})</p>
+                                    <p className="text-indigo-200 mt-1">👤 {user.name} ({roleLabel})</p>
                                 </div>
                                 <div className="flex gap-3 items-center">
-                                    {!isOnline && (
-                                        <div className="bg-red-500 px-4 py-2 rounded-lg text-sm font-semibold">
-                                            ⚠️ Offline
-                                        </div>
-                                    )}
+                                    {!isOnline && <div className="bg-red-500 px-4 py-2 rounded-lg text-sm font-semibold">⚠️ Offline</div>}
                                     {lastSync && (
                                         <div className="text-sm bg-white bg-opacity-20 px-4 py-2 rounded-lg">
                                             📡 Última sync: {new Date(lastSync).toLocaleString('pt-BR')}
@@ -426,14 +329,11 @@
                                             ⚙️ Configurar
                                         </button>
                                     )}
-                                    <button onClick={handleLogout}
-                                        className="bg-red-500 px-6 py-2 rounded-lg font-bold hover:bg-red-600 transition">
-                                        🚪 Sair
-                                    </button>
+                                    <button onClick={handleLogout} className="bg-red-500 px-6 py-2 rounded-lg font-bold hover:bg-red-600 transition">🚪 Sair</button>
                                 </div>
                             </div>
                             
-                            <div className="flex gap-2">
+                            <div className="flex gap-2 flex-wrap">
                                 <button onClick={() => setActiveTab('dashboard')}
                                     className={`px-6 py-3 rounded-lg font-bold transition ${activeTab === 'dashboard' ? 'bg-white text-indigo-600' : 'bg-indigo-500 hover:bg-indigo-400'}`}>
                                     📊 Dashboard
@@ -446,10 +346,14 @@
                                     className={`px-6 py-3 rounded-lg font-bold transition ${activeTab === 'reports' ? 'bg-white text-indigo-600' : 'bg-indigo-500 hover:bg-indigo-400'}`}>
                                     📈 Relatórios
                                 </button>
-                                <button onClick={() => setActiveTab('history')}
-                                    className={`px-6 py-3 rounded-lg font-bold transition ${activeTab === 'history' ? 'bg-white text-indigo-600' : 'bg-indigo-500 hover:bg-indigo-400'}`}>
-                                    📋 Histórico
-                                </button>
+                                {/* Histórico: apenas admin */}
+                                {user.canManage && (
+                                    <button onClick={() => setActiveTab('history')}
+                                        className={`px-6 py-3 rounded-lg font-bold transition ${activeTab === 'history' ? 'bg-white text-indigo-600' : 'bg-indigo-500 hover:bg-indigo-400'}`}>
+                                        📋 Histórico
+                                    </button>
+                                )}
+                                {/* Turmas e Usuários: apenas admin */}
                                 {user.canManage && (
                                     <>
                                         <button onClick={() => setShowClasses(true)}
@@ -468,9 +372,22 @@
                     
                     <div className="max-w-7xl mx-auto p-6">
                         {activeTab === 'dashboard' && <Dashboard classes={classes} />}
-                        {activeTab === 'frequency' && <Frequency classes={classes} setClasses={setClasses} selectedClass={selectedClass} setSelectedClass={setSelectedClass} selectedDate={selectedDate} setSelectedDate={setSelectedDate} canEdit={user.canEdit} setShowStudents={setShowStudents} showToast={showToast} />}
-                        {activeTab === 'reports' && <Reports classes={classes} showToast={showToast} />}
-                        {activeTab === 'history' && <History classes={classes} showToast={showToast} />}
+                        {activeTab === 'frequency' && (
+                            <Frequency
+                                classes={classes}
+                                setClasses={setClasses}
+                                selectedClass={selectedClass}
+                                setSelectedClass={setSelectedClass}
+                                selectedDate={selectedDate}
+                                setSelectedDate={setSelectedDate}
+                                canEdit={user.canEdit}
+                                canManage={user.canManage}
+                                setShowStudents={setShowStudents}
+                                showToast={showToast}
+                            />
+                        )}
+                        {activeTab === 'reports' && <Reports classes={classes} showToast={showToast} canManage={user.canManage} />}
+                        {activeTab === 'history' && user.canManage && <History classes={classes} showToast={showToast} />}
                     </div>
                     
                     {showConfig && <ConfigModal onClose={() => setShowConfig(false)} showToast={showToast} />}
@@ -484,7 +401,6 @@
         function Dashboard({ classes }) {
             const totalStudents = classes.reduce((sum, c) => sum + c.students.filter(s => s.status === 'ativo').length, 0);
             const today = new Date().toISOString().split('T')[0];
-            
             let totalPresent = 0, totalAbsent = 0, totalJustified = 0;
             classes.forEach(c => {
                 c.students.filter(s => s.status === 'ativo').forEach(s => {
@@ -494,7 +410,6 @@
                     else if (att === 'justificada') totalJustified++;
                 });
             });
-            
             return (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     <div className="bg-white p-6 rounded-xl shadow-lg border-l-4 border-indigo-500">
@@ -502,25 +417,21 @@
                         <div className="text-gray-600 text-sm mb-1">Total de Turmas</div>
                         <div className="text-3xl font-bold text-indigo-600">{classes.length}</div>
                     </div>
-                    
                     <div className="bg-white p-6 rounded-xl shadow-lg border-l-4 border-blue-500">
                         <div className="text-3xl mb-2">👨‍🎓</div>
                         <div className="text-gray-600 text-sm mb-1">Alunos Ativos</div>
                         <div className="text-3xl font-bold text-blue-600">{totalStudents}</div>
                     </div>
-                    
                     <div className="bg-white p-6 rounded-xl shadow-lg border-l-4 border-green-500">
                         <div className="text-3xl mb-2">✅</div>
                         <div className="text-gray-600 text-sm mb-1">Presentes Hoje</div>
                         <div className="text-3xl font-bold text-green-600">{totalPresent}</div>
                     </div>
-                    
                     <div className="bg-white p-6 rounded-xl shadow-lg border-l-4 border-red-500">
                         <div className="text-3xl mb-2">❌</div>
                         <div className="text-gray-600 text-sm mb-1">Faltas Hoje</div>
                         <div className="text-3xl font-bold text-red-600">{totalAbsent}</div>
                     </div>
-                    
                     <div className="col-span-full bg-white p-6 rounded-xl shadow-lg">
                         <h3 className="text-xl font-bold mb-4">📊 Visão Geral das Turmas</h3>
                         <div className="space-y-3">
@@ -528,7 +439,6 @@
                                 const activeStudents = c.students.filter(s => s.status === 'ativo');
                                 const present = activeStudents.filter(s => s.attendance?.[today] === 'presente').length;
                                 const percentage = activeStudents.length > 0 ? ((present / activeStudents.length) * 100).toFixed(0) : 0;
-                                
                                 return (
                                     <div key={c.id} className="border-2 rounded-lg p-4">
                                         <div className="flex justify-between items-center mb-2">
@@ -542,30 +452,22 @@
                                     </div>
                                 );
                             })}
-                            {classes.length === 0 && (
-                                <p className="text-gray-500 text-center py-8">Nenhuma turma cadastrada ainda</p>
-                            )}
+                            {classes.length === 0 && <p className="text-gray-500 text-center py-8">Nenhuma turma cadastrada ainda</p>}
                         </div>
                     </div>
                 </div>
             );
         }
         
-        function Frequency({ classes, setClasses, selectedClass, setSelectedClass, selectedDate, setSelectedDate, canEdit, setShowStudents, showToast }) {
+        // canManage controla o botão "Gerenciar Alunos"
+        function Frequency({ classes, setClasses, selectedClass, setSelectedClass, selectedDate, setSelectedDate, canEdit, canManage, setShowStudents, showToast }) {
             const cls = classes.find(c => c.id === selectedClass);
             
             const handleAttendance = (studentId, status) => {
                 if (!canEdit) return;
-                setClasses(classes.map(c => 
+                setClasses(classes.map(c =>
                     c.id === selectedClass
-                        ? {
-                            ...c,
-                            students: c.students.map(s =>
-                                s.id === studentId
-                                    ? { ...s, attendance: { ...s.attendance, [selectedDate]: status } }
-                                    : s
-                            )
-                        }
+                        ? { ...c, students: c.students.map(s => s.id === studentId ? { ...s, attendance: { ...s.attendance, [selectedDate]: status } } : s) }
                         : c
                 ));
             };
@@ -574,14 +476,7 @@
                 if (!canEdit) return;
                 setClasses(classes.map(c =>
                     c.id === selectedClass
-                        ? {
-                            ...c,
-                            students: c.students.map(s =>
-                                s.id === studentId
-                                    ? { ...s, observations: { ...s.observations, [selectedDate]: obs } }
-                                    : s
-                            )
-                        }
+                        ? { ...c, students: c.students.map(s => s.id === studentId ? { ...s, observations: { ...s.observations, [selectedDate]: obs } } : s) }
                         : c
                 ));
             };
@@ -590,19 +485,15 @@
                 <div className="space-y-6">
                     <div className="bg-white p-6 rounded-xl shadow-lg">
                         <h2 className="text-2xl font-bold mb-4">✅ Controle de Frequência</h2>
-                        
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                             <div>
                                 <label className="block text-sm font-bold text-gray-700 mb-2">🏫 Selecione a Turma:</label>
                                 <select value={selectedClass || ''} onChange={(e) => setSelectedClass(Number(e.target.value))}
                                     className="w-full px-4 py-3 border-2 rounded-lg focus:border-indigo-500 outline-none">
                                     <option value="">-- Escolha uma turma --</option>
-                                    {classes.map(c => (
-                                        <option key={c.id} value={c.id}>{c.name}</option>
-                                    ))}
+                                    {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                 </select>
                             </div>
-                            
                             <div>
                                 <label className="block text-sm font-bold text-gray-700 mb-2">📅 Data:</label>
                                 <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)}
@@ -610,7 +501,8 @@
                             </div>
                         </div>
                         
-                        {cls && (
+                        {/* Botão Gerenciar Alunos: apenas admin */}
+                        {cls && canManage && (
                             <div className="flex justify-end mb-4">
                                 <button onClick={() => setShowStudents(true)}
                                     className="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-blue-700 transition">
@@ -623,7 +515,16 @@
                     {cls ? (
                         <div className="bg-white p-6 rounded-xl shadow-lg">
                             <h3 className="text-xl font-bold mb-4">👥 Lista de Chamada - {cls.name}</h3>
-                            <p className="text-sm text-gray-600 mb-4">📅 {new Date(selectedDate + 'T00:00:00').toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                            <p className="text-sm text-gray-600 mb-4">
+                                📅 {new Date(selectedDate + 'T00:00:00').toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                            </p>
+                            
+                            {/* Banner informativo para visualizador */}
+                            {!canEdit && (
+                                <div className="mb-4 bg-blue-50 border-2 border-blue-200 rounded-lg px-4 py-3 text-blue-700 text-sm font-semibold">
+                                    👁️ Modo visualização — você pode acompanhar a frequência mas não pode editá-la.
+                                </div>
+                            )}
                             
                             {cls.students.filter(s => s.status === 'ativo').length === 0 ? (
                                 <p className="text-gray-500 text-center py-8">Nenhum aluno ativo nesta turma</p>
@@ -632,34 +533,30 @@
                                     {cls.students.filter(s => s.status === 'ativo').map((student, idx) => (
                                         <div key={student.id} className="border-2 rounded-lg p-4 hover:bg-gray-50 transition">
                                             <div className="flex items-center gap-4 mb-3">
-                                                <span className="font-bold text-lg bg-indigo-100 w-10 h-10 rounded-full flex items-center justify-center">
-                                                    {idx + 1}
-                                                </span>
+                                                <span className="font-bold text-lg bg-indigo-100 w-10 h-10 rounded-full flex items-center justify-center">{idx + 1}</span>
                                                 <span className="flex-1 font-bold text-lg">{student.name}</span>
-                                                
                                                 <div className="flex gap-2">
                                                     <button onClick={() => handleAttendance(student.id, 'presente')} disabled={!canEdit}
-                                                        className={`px-6 py-2 rounded-lg font-bold transition ${student.attendance?.[selectedDate] === 'presente' ? 'bg-green-600 text-white' : 'bg-gray-200 hover:bg-green-100'} ${!canEdit && 'opacity-50 cursor-not-allowed'}`}>
+                                                        className={`px-6 py-2 rounded-lg font-bold transition ${student.attendance?.[selectedDate] === 'presente' ? 'bg-green-600 text-white' : 'bg-gray-200 hover:bg-green-100'} ${!canEdit && 'opacity-60 cursor-not-allowed'}`}>
                                                         ✅ Presente
                                                     </button>
                                                     <button onClick={() => handleAttendance(student.id, 'falta')} disabled={!canEdit}
-                                                        className={`px-6 py-2 rounded-lg font-bold transition ${student.attendance?.[selectedDate] === 'falta' ? 'bg-red-600 text-white' : 'bg-gray-200 hover:bg-red-100'} ${!canEdit && 'opacity-50 cursor-not-allowed'}`}>
+                                                        className={`px-6 py-2 rounded-lg font-bold transition ${student.attendance?.[selectedDate] === 'falta' ? 'bg-red-600 text-white' : 'bg-gray-200 hover:bg-red-100'} ${!canEdit && 'opacity-60 cursor-not-allowed'}`}>
                                                         ❌ Falta
                                                     </button>
                                                     <button onClick={() => handleAttendance(student.id, 'justificada')} disabled={!canEdit}
-                                                        className={`px-6 py-2 rounded-lg font-bold transition ${student.attendance?.[selectedDate] === 'justificada' ? 'bg-yellow-600 text-white' : 'bg-gray-200 hover:bg-yellow-100'} ${!canEdit && 'opacity-50 cursor-not-allowed'}`}>
+                                                        className={`px-6 py-2 rounded-lg font-bold transition ${student.attendance?.[selectedDate] === 'justificada' ? 'bg-yellow-600 text-white' : 'bg-gray-200 hover:bg-yellow-100'} ${!canEdit && 'opacity-60 cursor-not-allowed'}`}>
                                                         📝 Justificada
                                                     </button>
                                                 </div>
                                             </div>
-                                            
                                             <div>
                                                 <label className="block text-sm font-semibold text-gray-700 mb-1">📝 Observações:</label>
-                                                <textarea value={student.observations?.[selectedDate] || ''} 
+                                                <textarea value={student.observations?.[selectedDate] || ''}
                                                     onChange={(e) => handleObservation(student.id, e.target.value)}
                                                     disabled={!canEdit}
-                                                    placeholder="Adicione observações sobre o aluno..."
-                                                    className="w-full px-3 py-2 border-2 rounded-lg focus:border-indigo-500 outline-none resize-none" 
+                                                    placeholder={canEdit ? "Adicione observações sobre o aluno..." : "Sem observações"}
+                                                    className={`w-full px-3 py-2 border-2 rounded-lg focus:border-indigo-500 outline-none resize-none ${!canEdit && 'bg-gray-50 cursor-not-allowed'}`}
                                                     rows="2"></textarea>
                                             </div>
                                         </div>
@@ -677,7 +574,8 @@
             );
         }
         
-        function Reports({ classes, showToast }) {
+        // canManage controla visibilidade dos botões PDF
+        function Reports({ classes, showToast, canManage }) {
             const [selectedClass, setSelectedClass] = useState(null);
             const [startDate, setStartDate] = useState(new Date(new Date().setDate(1)).toISOString().split('T')[0]);
             const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
@@ -688,70 +586,48 @@
             
             const generateReport = () => {
                 if (!cls) return null;
-                
                 const start = new Date(startDate + 'T00:00:00');
                 const end = new Date(endDate + 'T00:00:00');
                 const days = [];
-                
-                for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-                    days.push(d.toISOString().split('T')[0]);
-                }
-                
+                for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) days.push(d.toISOString().split('T')[0]);
                 return cls.students.filter(s => s.status === 'ativo').map(student => {
                     let presente = 0, falta = 0, justificada = 0;
-                    
                     days.forEach(day => {
                         const att = student.attendance?.[day];
                         if (att === 'presente') presente++;
                         else if (att === 'falta') falta++;
                         else if (att === 'justificada') justificada++;
                     });
-                    
                     const total = presente + falta + justificada;
                     const percentage = total > 0 ? ((presente / total) * 100).toFixed(1) : 0;
-                    
                     return { student, presente, falta, justificada, total, percentage, days };
                 });
             };
             
             const report = generateReport();
             
-            // FUNÇÕES PDF - COMPLETAS
             const generateIndividualPDF = () => {
                 if (!selectedStudent || !report) return;
-                
                 const studentData = report.find(r => r.student.id === selectedStudent);
                 if (!studentData) return;
-                
                 const { jsPDF } = window.jspdf;
                 const doc = new jsPDF();
-                
-                doc.setFontSize(20);
-                doc.setFont(undefined, 'bold');
+                doc.setFontSize(20); doc.setFont(undefined, 'bold');
                 doc.text('Relatório Individual de Frequência', 105, 20, { align: 'center' });
-                
-                doc.setFontSize(12);
-                doc.setFont(undefined, 'normal');
+                doc.setFontSize(12); doc.setFont(undefined, 'normal');
                 doc.text(`Turma: ${cls.name}`, 20, 35);
                 doc.text(`Período: ${new Date(startDate + 'T00:00:00').toLocaleDateString('pt-BR')} a ${new Date(endDate + 'T00:00:00').toLocaleDateString('pt-BR')}`, 20, 42);
-                
-                doc.setFontSize(16);
-                doc.setFont(undefined, 'bold');
+                doc.setFontSize(16); doc.setFont(undefined, 'bold');
                 doc.text(`Aluno: ${studentData.student.name}`, 20, 55);
-                
-                doc.setFontSize(12);
-                doc.setFont(undefined, 'normal');
+                doc.setFontSize(12); doc.setFont(undefined, 'normal');
                 doc.text(`Presenças: ${studentData.presente}`, 20, 70);
                 doc.text(`Faltas: ${studentData.falta}`, 20, 77);
                 doc.text(`Justificadas: ${studentData.justificada}`, 20, 84);
                 doc.text(`Total de Aulas: ${studentData.total}`, 20, 91);
                 doc.text(`Percentual de Presença: ${studentData.percentage}%`, 20, 98);
-                
                 const status = parseFloat(studentData.percentage) >= 75 ? 'APROVADO' : 'REPROVADO por falta';
-                doc.setFontSize(14);
-                doc.setFont(undefined, 'bold');
+                doc.setFontSize(14); doc.setFont(undefined, 'bold');
                 doc.text(`Situação: ${status}`, 20, 110);
-                
                 doc.save(`relatorio_${studentData.student.name.replace(/\s/g, '_')}.pdf`);
                 showToast('PDF Individual gerado com sucesso!', 'success');
                 setShowStudentModal(false);
@@ -759,268 +635,134 @@
             
             const generateClassPDF = () => {
                 if (!report) return;
-                
                 const { jsPDF } = window.jspdf;
                 const doc = new jsPDF();
-                
-                doc.setFontSize(18);
-                doc.setFont(undefined, 'bold');
+                doc.setFontSize(18); doc.setFont(undefined, 'bold');
                 doc.text('Relatório de Frequência da Turma', 105, 15, { align: 'center' });
-                
-                doc.setFontSize(11);
-                doc.setFont(undefined, 'normal');
+                doc.setFontSize(11); doc.setFont(undefined, 'normal');
                 doc.text(`Turma: ${cls.name}`, 105, 23, { align: 'center' });
                 doc.text(`Período: ${new Date(startDate + 'T00:00:00').toLocaleDateString('pt-BR')} a ${new Date(endDate + 'T00:00:00').toLocaleDateString('pt-BR')}`, 105, 29, { align: 'center' });
-                
-                const tableData = report.map((r, idx) => [
-                    idx + 1,
-                    r.student.name,
-                    r.presente,
-                    r.falta,
-                    r.justificada,
-                    r.total,
-                    `${r.percentage}%`
-                ]);
-                
-                doc.autoTable({
-                    startY: 35,
-                    head: [['#', 'Aluno', 'Presenças', 'Faltas', 'Justificadas', 'Total', '% Presença']],
-                    body: tableData,
-                    theme: 'grid',
-                    headStyles: { fillColor: [91, 95, 199], fontSize: 10, fontStyle: 'bold' },
-                    styles: { fontSize: 9, cellPadding: 3 },
-                    columnStyles: {
-                        0: { cellWidth: 10 },
-                        1: { cellWidth: 70 },
-                        2: { cellWidth: 20, halign: 'center' },
-                        3: { cellWidth: 20, halign: 'center' },
-                        4: { cellWidth: 25, halign: 'center' },
-                        5: { cellWidth: 20, halign: 'center' },
-                        6: { cellWidth: 25, halign: 'center' }
-                    }
-                });
-                
+                const tableData = report.map((r, idx) => [idx + 1, r.student.name, r.presente, r.falta, r.justificada, r.total, `${r.percentage}%`]);
+                doc.autoTable({ startY: 35, head: [['#', 'Aluno', 'Presenças', 'Faltas', 'Justificadas', 'Total', '% Presença']], body: tableData, theme: 'grid', headStyles: { fillColor: [91, 95, 199], fontSize: 10, fontStyle: 'bold' }, styles: { fontSize: 9, cellPadding: 3 } });
                 const finalY = doc.lastAutoTable.finalY + 10;
                 doc.setFontSize(10);
                 doc.text(`Total de Presenças: ${report.reduce((sum, r) => sum + r.presente, 0)}`, 20, finalY);
                 doc.text(`Total de Faltas: ${report.reduce((sum, r) => sum + r.falta, 0)}`, 20, finalY + 6);
                 doc.text(`Total de Justificadas: ${report.reduce((sum, r) => sum + r.justificada, 0)}`, 20, finalY + 12);
-                
                 doc.save(`relatorio_turma_${cls.name.replace(/\s/g, '_')}.pdf`);
                 showToast('PDF da Turma gerado com sucesso!', 'success');
             };
             
             const generatePeriodPDF = () => {
                 if (!report) return;
-                
                 const { jsPDF } = window.jspdf;
                 const doc = new jsPDF();
-                
                 const start = new Date(startDate + 'T00:00:00');
                 const end = new Date(endDate + 'T00:00:00');
                 const diffDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
-                
-                doc.setFontSize(18);
-                doc.setFont(undefined, 'bold');
+                doc.setFontSize(18); doc.setFont(undefined, 'bold');
                 doc.text('Relatório de Frequência por Período', 105, 15, { align: 'center' });
-                
-                doc.setFontSize(11);
-                doc.setFont(undefined, 'normal');
+                doc.setFontSize(11); doc.setFont(undefined, 'normal');
                 doc.text(`Turma: ${cls.name}`, 105, 23, { align: 'center' });
                 doc.text(`Período: ${diffDays + 1} dias (${new Date(startDate + 'T00:00:00').toLocaleDateString('pt-BR')} a ${new Date(endDate + 'T00:00:00').toLocaleDateString('pt-BR')})`, 105, 29, { align: 'center' });
-                
                 const totalPresencas = report.reduce((sum, r) => sum + r.presente, 0);
                 const totalFaltas = report.reduce((sum, r) => sum + r.falta, 0);
                 const totalJustificadas = report.reduce((sum, r) => sum + r.justificada, 0);
                 const totalAulas = report.reduce((sum, r) => sum + r.total, 0);
                 const mediaPresenca = totalAulas > 0 ? ((totalPresencas / totalAulas) * 100).toFixed(1) : 0;
-                
-                doc.setFontSize(12);
-                doc.setFont(undefined, 'bold');
-                doc.text('Estatísticas do Período:', 20, 45);
-                
-                doc.setFont(undefined, 'normal');
-                doc.setFontSize(11);
+                doc.setFontSize(12); doc.setFont(undefined, 'bold'); doc.text('Estatísticas do Período:', 20, 45);
+                doc.setFont(undefined, 'normal'); doc.setFontSize(11);
                 doc.text(`Total de Presenças: ${totalPresencas}`, 20, 55);
                 doc.text(`Total de Faltas: ${totalFaltas}`, 20, 62);
                 doc.text(`Total de Justificadas: ${totalJustificadas}`, 20, 69);
                 doc.text(`Média de Presença da Turma: ${mediaPresenca}%`, 20, 76);
                 doc.text(`Número de Alunos Ativos: ${report.length}`, 20, 83);
-                
-                const tableData = report.map((r, idx) => [
-                    idx + 1,
-                    r.student.name,
-                    `${r.percentage}%`,
-                    parseFloat(r.percentage) >= 75 ? 'OK' : 'ATENÇÃO'
-                ]);
-                
-                doc.autoTable({
-                    startY: 95,
-                    head: [['#', 'Aluno', '% Presença', 'Status']],
-                    body: tableData,
-                    theme: 'grid',
-                    headStyles: { fillColor: [255, 140, 0], fontSize: 10, fontStyle: 'bold' },
-                    styles: { fontSize: 9, cellPadding: 3 },
-                    columnStyles: {
-                        0: { cellWidth: 15 },
-                        1: { cellWidth: 100 },
-                        2: { cellWidth: 30, halign: 'center' },
-                        3: { cellWidth: 35, halign: 'center' }
-                    }
-                });
-                
+                const tableData = report.map((r, idx) => [idx + 1, r.student.name, `${r.percentage}%`, parseFloat(r.percentage) >= 75 ? 'OK' : 'ATENÇÃO']);
+                doc.autoTable({ startY: 95, head: [['#', 'Aluno', '% Presença', 'Status']], body: tableData, theme: 'grid', headStyles: { fillColor: [255, 140, 0], fontSize: 10, fontStyle: 'bold' }, styles: { fontSize: 9, cellPadding: 3 } });
                 doc.save(`relatorio_periodo_${cls.name.replace(/\s/g, '_')}.pdf`);
                 showToast('PDF por Período gerado com sucesso!', 'success');
             };
             
             const generateGraphPDF = () => {
                 if (!report) return;
-                
                 const { jsPDF } = window.jspdf;
                 const doc = new jsPDF();
-                
-                doc.setFontSize(18);
-                doc.setFont(undefined, 'bold');
+                doc.setFontSize(18); doc.setFont(undefined, 'bold');
                 doc.text('Relatório com Estatísticas Visuais', 105, 15, { align: 'center' });
-                
-                doc.setFontSize(11);
-                doc.setFont(undefined, 'normal');
+                doc.setFontSize(11); doc.setFont(undefined, 'normal');
                 doc.text(`Turma: ${cls.name}`, 105, 23, { align: 'center' });
                 doc.text(`Período: ${new Date(startDate + 'T00:00:00').toLocaleDateString('pt-BR')} a ${new Date(endDate + 'T00:00:00').toLocaleDateString('pt-BR')}`, 105, 29, { align: 'center' });
-                
                 const totalPresencas = report.reduce((sum, r) => sum + r.presente, 0);
                 const totalFaltas = report.reduce((sum, r) => sum + r.falta, 0);
                 const totalJustificadas = report.reduce((sum, r) => sum + r.justificada, 0);
-                
-                doc.setFontSize(14);
-                doc.setFont(undefined, 'bold');
-                doc.text('Distribuição Geral:', 20, 45);
-                
+                doc.setFontSize(14); doc.setFont(undefined, 'bold'); doc.text('Distribuição Geral:', 20, 45);
                 const total = totalPresencas + totalFaltas + totalJustificadas;
                 const percPresenca = total > 0 ? ((totalPresencas / total) * 100).toFixed(1) : 0;
                 const percFalta = total > 0 ? ((totalFaltas / total) * 100).toFixed(1) : 0;
                 const percJust = total > 0 ? ((totalJustificadas / total) * 100).toFixed(1) : 0;
-                
-                doc.setFontSize(11);
-                doc.setFont(undefined, 'normal');
-                doc.setTextColor(0, 128, 0);
-                doc.text(`Presenças: ${totalPresencas} (${percPresenca}%)`, 20, 55);
-                doc.setTextColor(255, 0, 0);
-                doc.text(`Faltas: ${totalFaltas} (${percFalta}%)`, 20, 62);
-                doc.setTextColor(255, 165, 0);
-                doc.text(`Justificadas: ${totalJustificadas} (${percJust}%)`, 20, 69);
-                
+                doc.setFontSize(11); doc.setFont(undefined, 'normal');
+                doc.setTextColor(0, 128, 0); doc.text(`Presenças: ${totalPresencas} (${percPresenca}%)`, 20, 55);
+                doc.setTextColor(255, 0, 0); doc.text(`Faltas: ${totalFaltas} (${percFalta}%)`, 20, 62);
+                doc.setTextColor(255, 165, 0); doc.text(`Justificadas: ${totalJustificadas} (${percJust}%)`, 20, 69);
                 doc.setTextColor(0, 0, 0);
-                
-                doc.setFontSize(14);
-                doc.setFont(undefined, 'bold');
-                doc.text('Ranking de Frequência:', 20, 85);
-                
+                doc.setFontSize(14); doc.setFont(undefined, 'bold'); doc.text('Ranking de Frequência:', 20, 85);
                 const sorted = [...report].sort((a, b) => parseFloat(b.percentage) - parseFloat(a.percentage));
-                const top5 = sorted.slice(0, 5);
-                
-                doc.setFontSize(10);
-                doc.setFont(undefined, 'normal');
-                top5.forEach((r, idx) => {
-                    const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '';
+                doc.setFontSize(10); doc.setFont(undefined, 'normal');
+                sorted.slice(0, 5).forEach((r, idx) => {
+                    const medal = idx === 0 ? '1o' : idx === 1 ? '2o' : idx === 2 ? '3o' : '';
                     doc.text(`${idx + 1}. ${r.student.name}: ${r.percentage}% ${medal}`, 20, 95 + (idx * 7));
                 });
-                
                 const emRisco = report.filter(r => parseFloat(r.percentage) < 75);
                 if (emRisco.length > 0) {
-                    doc.setFontSize(14);
-                    doc.setFont(undefined, 'bold');
-                    doc.setTextColor(255, 0, 0);
+                    doc.setFontSize(14); doc.setFont(undefined, 'bold'); doc.setTextColor(255, 0, 0);
                     doc.text(`Alunos em Risco (< 75%): ${emRisco.length}`, 20, 135);
-                    
-                    doc.setFontSize(10);
-                    doc.setFont(undefined, 'normal');
-                    emRisco.slice(0, 5).forEach((r, idx) => {
-                        doc.text(`• ${r.student.name}: ${r.percentage}%`, 20, 145 + (idx * 7));
-                    });
+                    doc.setFontSize(10); doc.setFont(undefined, 'normal');
+                    emRisco.slice(0, 5).forEach((r, idx) => { doc.text(`- ${r.student.name}: ${r.percentage}%`, 20, 145 + (idx * 7)); });
                 }
-                
                 doc.setTextColor(0, 0, 0);
-                
                 doc.save(`relatorio_graficos_${cls.name.replace(/\s/g, '_')}.pdf`);
                 showToast('PDF com Gráficos gerado com sucesso!', 'success');
             };
             
             const generateAttendanceSheet = () => {
                 if (!cls) return;
-                
                 const { jsPDF } = window.jspdf;
                 const doc = new jsPDF();
-                
-                doc.setFontSize(18);
-                doc.setFont(undefined, 'bold');
+                doc.setFontSize(18); doc.setFont(undefined, 'bold');
                 doc.text('Folha de Presença', 105, 15, { align: 'center' });
-                
-                doc.setFontSize(11);
-                doc.setFont(undefined, 'normal');
+                doc.setFontSize(11); doc.setFont(undefined, 'normal');
                 doc.text(`Turma: ${cls.name}`, 20, 25);
                 doc.text(`Data: ___/___/_____`, 20, 32);
                 doc.text(`Professor: _________________________________`, 20, 39);
-                
                 const activeStudents = cls.students.filter(s => s.status === 'ativo');
-                const tableData = activeStudents.map((s, idx) => [
-                    idx + 1,
-                    s.name,
-                    '',
-                    ''
-                ]);
-                
-                doc.autoTable({
-                    startY: 50,
-                    head: [['#', 'Nome do Aluno', 'Presente', 'Falta']],
-                    body: tableData,
-                    theme: 'grid',
-                    headStyles: { fillColor: [0, 128, 128], fontSize: 11, fontStyle: 'bold' },
-                    styles: { fontSize: 10, cellPadding: 5, minCellHeight: 12 },
-                    columnStyles: {
-                        0: { cellWidth: 15, halign: 'center' },
-                        1: { cellWidth: 110 },
-                        2: { cellWidth: 30, halign: 'center' },
-                        3: { cellWidth: 25, halign: 'center' }
-                    }
-                });
-                
+                const tableData = activeStudents.map((s, idx) => [idx + 1, s.name, '', '']);
+                doc.autoTable({ startY: 50, head: [['#', 'Nome do Aluno', 'Presente', 'Falta']], body: tableData, theme: 'grid', headStyles: { fillColor: [0, 128, 128], fontSize: 11, fontStyle: 'bold' }, styles: { fontSize: 10, cellPadding: 5, minCellHeight: 12 } });
                 const finalY = doc.lastAutoTable.finalY + 15;
                 doc.setFontSize(9);
                 doc.text('Assinatura do Professor: _________________________________', 20, finalY);
                 doc.text(`Total de Alunos: ${activeStudents.length}`, 20, finalY + 10);
-                
                 doc.save(`folha_presenca_${cls.name.replace(/\s/g, '_')}.pdf`);
                 showToast('Folha de Presença gerada com sucesso!', 'success');
-            };
-            
-            const handlePrint = () => {
-                window.print();
             };
             
             return (
                 <div className="space-y-6">
                     <div className="bg-white p-6 rounded-xl shadow-lg no-print">
                         <h2 className="text-2xl font-bold mb-4">📈 Relatórios de Frequência</h2>
-                        
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
                                 <label className="block text-sm font-bold text-gray-700 mb-2">🏫 Turma:</label>
                                 <select value={selectedClass || ''} onChange={(e) => setSelectedClass(Number(e.target.value))}
                                     className="w-full px-4 py-3 border-2 rounded-lg focus:border-indigo-500 outline-none">
                                     <option value="">-- Escolha uma turma --</option>
-                                    {classes.map(c => (
-                                        <option key={c.id} value={c.id}>{c.name}</option>
-                                    ))}
+                                    {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                 </select>
                             </div>
-                            
                             <div>
                                 <label className="block text-sm font-bold text-gray-700 mb-2">📅 Data Início:</label>
                                 <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)}
                                     className="w-full px-4 py-3 border-2 rounded-lg focus:border-indigo-500 outline-none" />
                             </div>
-                            
                             <div>
                                 <label className="block text-sm font-bold text-gray-700 mb-2">📅 Data Fim:</label>
                                 <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)}
@@ -1028,86 +770,56 @@
                             </div>
                         </div>
                         
-                        {/* BOTÕES PDF - SÓ APARECEM QUANDO SELECIONA TURMA */}
-                        {report && (
-                            <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-6 rounded-xl border-2 border-purple-200 mb-4 mt-4">
+                        {/* Bloco PDF: apenas admin */}
+                        {report && canManage && (
+                            <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-6 rounded-xl border-2 border-purple-200 mt-4">
                                 <h3 className="text-xl font-bold mb-4 text-purple-800">📄 Exportar para PDF</h3>
-                                
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                                     <button onClick={() => setShowStudentModal(true)} className="bg-blue-600 text-white px-6 py-4 rounded-lg font-bold hover:bg-blue-700 transition shadow-lg flex items-center justify-center gap-2">
                                         <span className="text-2xl">👤</span>
-                                        <div className="text-left">
-                                            <div className="text-sm">Relatório</div>
-                                            <div>Individual</div>
-                                        </div>
+                                        <div className="text-left"><div className="text-sm">Relatório</div><div>Individual</div></div>
                                     </button>
-
                                     <button onClick={generateClassPDF} className="bg-green-600 text-white px-6 py-4 rounded-lg font-bold hover:bg-green-700 transition shadow-lg flex items-center justify-center gap-2">
                                         <span className="text-2xl">👥</span>
-                                        <div className="text-left">
-                                            <div className="text-sm">Relatório</div>
-                                            <div>Turma Completa</div>
-                                        </div>
+                                        <div className="text-left"><div className="text-sm">Relatório</div><div>Turma Completa</div></div>
                                     </button>
-
                                     <button onClick={generatePeriodPDF} className="bg-orange-600 text-white px-6 py-4 rounded-lg font-bold hover:bg-orange-700 transition shadow-lg flex items-center justify-center gap-2">
                                         <span className="text-2xl">📅</span>
-                                        <div className="text-left">
-                                            <div className="text-sm">Relatório</div>
-                                            <div>Por Período</div>
-                                        </div>
+                                        <div className="text-left"><div className="text-sm">Relatório</div><div>Por Período</div></div>
                                     </button>
-
                                     <button onClick={generateGraphPDF} className="bg-purple-600 text-white px-6 py-4 rounded-lg font-bold hover:bg-purple-700 transition shadow-lg flex items-center justify-center gap-2">
                                         <span className="text-2xl">📊</span>
-                                        <div className="text-left">
-                                            <div className="text-sm">Relatório com</div>
-                                            <div>Gráficos</div>
-                                        </div>
+                                        <div className="text-left"><div className="text-sm">Relatório com</div><div>Gráficos</div></div>
                                     </button>
-
                                     <button onClick={generateAttendanceSheet} className="bg-teal-600 text-white px-6 py-4 rounded-lg font-bold hover:bg-teal-700 transition shadow-lg flex items-center justify-center gap-2">
                                         <span className="text-2xl">📋</span>
-                                        <div className="text-left">
-                                            <div className="text-sm">Folha de</div>
-                                            <div>Presença</div>
-                                        </div>
+                                        <div className="text-left"><div className="text-sm">Folha de</div><div>Presença</div></div>
                                     </button>
-
-                                    <button onClick={handlePrint} className="bg-indigo-600 text-white px-6 py-4 rounded-lg font-bold hover:bg-indigo-700 transition shadow-lg flex items-center justify-center gap-2">
+                                    <button onClick={() => window.print()} className="bg-indigo-600 text-white px-6 py-4 rounded-lg font-bold hover:bg-indigo-700 transition shadow-lg flex items-center justify-center gap-2">
                                         <span className="text-2xl">🖨️</span>
-                                        <div className="text-left">
-                                            <div className="text-sm">Imprimir</div>
-                                            <div>Relatório</div>
-                                        </div>
+                                        <div className="text-left"><div className="text-sm">Imprimir</div><div>Relatório</div></div>
                                     </button>
                                 </div>
                             </div>
                         )}
                     </div>
                     
-                    {/* Modal de seleção de aluno */}
+                    {/* Modal seleção de aluno para PDF individual */}
                     {showStudentModal && report && (
                         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
                             <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-2xl">
                                 <h3 className="text-xl font-bold mb-4">Selecione o Aluno</h3>
                                 <div className="space-y-2 max-h-96 overflow-y-auto">
                                     {report.map(r => (
-                                        <button
-                                            key={r.student.id}
-                                            onClick={() => {
-                                                setSelectedStudent(r.student.id);
-                                                generateIndividualPDF();
-                                            }}
+                                        <button key={r.student.id}
+                                            onClick={() => { setSelectedStudent(r.student.id); setTimeout(generateIndividualPDF, 100); }}
                                             className="w-full text-left p-3 border-2 rounded-lg hover:bg-blue-50 hover:border-blue-500 transition">
                                             <div className="font-bold">{r.student.name}</div>
                                             <div className="text-sm text-gray-600">Presença: {r.percentage}%</div>
                                         </button>
                                     ))}
                                 </div>
-                                <button onClick={() => setShowStudentModal(false)} className="w-full mt-4 bg-gray-200 py-3 rounded-lg font-bold hover:bg-gray-300 transition">
-                                    ❌ Cancelar
-                                </button>
+                                <button onClick={() => setShowStudentModal(false)} className="w-full mt-4 bg-gray-200 py-3 rounded-lg font-bold hover:bg-gray-300 transition">❌ Cancelar</button>
                             </div>
                         </div>
                     )}
@@ -1119,7 +831,6 @@
                                 <p className="text-gray-600 mt-2">{cls.name}</p>
                                 <p className="text-sm text-gray-500">Período: {new Date(startDate + 'T00:00:00').toLocaleDateString('pt-BR')} a {new Date(endDate + 'T00:00:00').toLocaleDateString('pt-BR')}</p>
                             </div>
-                            
                             <div className="overflow-x-auto">
                                 <table className="w-full border-collapse">
                                     <thead>
@@ -1143,16 +854,13 @@
                                                 <td className="border-2 p-3 text-center text-yellow-600 font-bold">{r.justificada}</td>
                                                 <td className="border-2 p-3 text-center font-bold">{r.total}</td>
                                                 <td className="border-2 p-3 text-center">
-                                                    <span className={`font-bold ${r.percentage >= 75 ? 'text-green-600' : 'text-red-600'}`}>
-                                                        {r.percentage}%
-                                                    </span>
+                                                    <span className={`font-bold ${r.percentage >= 75 ? 'text-green-600' : 'text-red-600'}`}>{r.percentage}%</span>
                                                 </td>
                                             </tr>
                                         ))}
                                     </tbody>
                                 </table>
                             </div>
-                            
                             <div className="mt-6 text-sm text-gray-600">
                                 <p>✅ Total de Presenças: {report.reduce((sum, r) => sum + r.presente, 0)}</p>
                                 <p>❌ Total de Faltas: {report.reduce((sum, r) => sum + r.falta, 0)}</p>
@@ -1169,424 +877,259 @@
             );
         }
         
-// COMPONENTE HISTORY CORRIGIDO - Cole este código no lugar do antigo
-
-function History({ classes, showToast }) {
-    const [filterStatus, setFilterStatus] = useState('todos');
-    const [selectedClass, setSelectedClass] = useState(null);
-    const [selectedStudent, setSelectedStudent] = useState(null);
-    const [showReportModal, setShowReportModal] = useState(false);
-    
-    // Coleta todos os alunos transferidos e falecidos
-    const getInactiveStudents = () => {
-        try {
-            const students = [];
-            if (!classes || !Array.isArray(classes)) return students;
+        function History({ classes, showToast }) {
+            const [filterStatus, setFilterStatus] = useState('todos');
+            const [selectedClass, setSelectedClass] = useState(null);
+            const [selectedStudent, setSelectedStudent] = useState(null);
+            const [showReportModal, setShowReportModal] = useState(false);
             
-            classes.forEach(cls => {
-                if (cls.students && Array.isArray(cls.students)) {
-                    cls.students
-                        .filter(s => s.status && s.status !== 'ativo')
-                        .forEach(s => {
-                            students.push({
-                                ...s,
-                                className: cls.name,
-                                classId: cls.id,
-                                exitDate: s.exitDate || null,
-                                exitObservation: s.exitObservation || ''
+            const getInactiveStudents = () => {
+                try {
+                    const students = [];
+                    if (!classes || !Array.isArray(classes)) return students;
+                    classes.forEach(cls => {
+                        if (cls.students && Array.isArray(cls.students)) {
+                            cls.students.filter(s => s.status && s.status !== 'ativo').forEach(s => {
+                                students.push({ ...s, className: cls.name, classId: cls.id, exitDate: s.exitDate || null, exitObservation: s.exitObservation || '' });
                             });
+                        }
+                    });
+                    return students;
+                } catch (e) { return []; }
+            };
+            
+            const allInactive = getInactiveStudents();
+            const filteredStudents = filterStatus === 'todos' ? allInactive : allInactive.filter(s => s.status === filterStatus);
+            const displayStudents = selectedClass ? filteredStudents.filter(s => s.classId === selectedClass) : filteredStudents;
+            
+            const generateStudentReport = (student) => {
+                try {
+                    let presente = 0, falta = 0, justificada = 0;
+                    if (!student.exitDate) {
+                        Object.entries(student.attendance || {}).forEach(([date, status]) => {
+                            if (status === 'presente') presente++;
+                            else if (status === 'falta') falta++;
+                            else if (status === 'justificada') justificada++;
                         });
-                }
-            });
-            return students;
-        } catch (e) {
-            console.error('Erro ao carregar alunos inativos:', e);
-            return [];
-        }
-    };
-    
-    const allInactive = getInactiveStudents();
-    
-    // Filtra por status
-    const filteredStudents = filterStatus === 'todos' 
-        ? allInactive 
-        : allInactive.filter(s => s.status === filterStatus);
-    
-    // Filtra por turma se selecionada
-    const displayStudents = selectedClass 
-        ? filteredStudents.filter(s => s.classId === selectedClass)
-        : filteredStudents;
-    
-    // Gera relatório do aluno até a data de saída
-    const generateStudentReport = (student) => {
-        try {
-            let presente = 0, falta = 0, justificada = 0;
-            
-            // Se não tem data de saída, conta tudo
-            if (!student.exitDate) {
-                Object.entries(student.attendance || {}).forEach(([date, status]) => {
-                    if (status === 'presente') presente++;
-                    else if (status === 'falta') falta++;
-                    else if (status === 'justificada') justificada++;
-                });
-            } else {
-                // Conta apenas até a data de saída
-                const exitDate = new Date(student.exitDate + 'T00:00:00');
-                Object.entries(student.attendance || {}).forEach(([date, status]) => {
-                    const attDate = new Date(date + 'T00:00:00');
-                    if (attDate <= exitDate) {
-                        if (status === 'presente') presente++;
-                        else if (status === 'falta') falta++;
-                        else if (status === 'justificada') justificada++;
+                    } else {
+                        const exitDate = new Date(student.exitDate + 'T00:00:00');
+                        Object.entries(student.attendance || {}).forEach(([date, status]) => {
+                            const attDate = new Date(date + 'T00:00:00');
+                            if (attDate <= exitDate) {
+                                if (status === 'presente') presente++;
+                                else if (status === 'falta') falta++;
+                                else if (status === 'justificada') justificada++;
+                            }
+                        });
                     }
-                });
-            }
+                    const total = presente + falta + justificada;
+                    const percentage = total > 0 ? ((presente / total) * 100).toFixed(1) : 0;
+                    return { student, presente, falta, justificada, total, percentage };
+                } catch (e) { return null; }
+            };
             
-            const total = presente + falta + justificada;
-            const percentage = total > 0 ? ((presente / total) * 100).toFixed(1) : 0;
+            const generateHistoryPDF = () => {
+                if (!selectedStudent) return;
+                const report = generateStudentReport(selectedStudent);
+                if (!report) { showToast('Erro ao gerar relatório!', 'error'); return; }
+                try {
+                    const { jsPDF } = window.jspdf;
+                    const doc = new jsPDF();
+                    doc.setFontSize(20); doc.setFont(undefined, 'bold');
+                    doc.text('Histórico de Frequência do Aluno', 105, 20, { align: 'center' });
+                    const statusText = selectedStudent.status === 'transferido' ? 'TRANSFERIDO' : 'FALECIDO';
+                    const statusColor = selectedStudent.status === 'transferido' ? [255, 140, 0] : [100, 100, 100];
+                    doc.setFontSize(14); doc.setTextColor(...statusColor);
+                    doc.text(statusText, 105, 30, { align: 'center' });
+                    doc.setTextColor(0, 0, 0);
+                    doc.setFontSize(12); doc.setFont(undefined, 'normal');
+                    doc.text(`Turma: ${selectedStudent.className}`, 20, 45);
+                    doc.text(`Aluno: ${selectedStudent.name}`, 20, 52);
+                    if (selectedStudent.exitDate) doc.text(`Data de Saída: ${new Date(selectedStudent.exitDate + 'T00:00:00').toLocaleDateString('pt-BR')}`, 20, 59);
+                    doc.setFontSize(14); doc.setFont(undefined, 'bold');
+                    doc.text(selectedStudent.exitDate ? 'Frequência até a Data de Saída:' : 'Frequência Total:', 20, 75);
+                    doc.setFontSize(12); doc.setFont(undefined, 'normal');
+                    doc.text(`Presenças: ${report.presente}`, 20, 85);
+                    doc.text(`Faltas: ${report.falta}`, 20, 92);
+                    doc.text(`Justificadas: ${report.justificada}`, 20, 99);
+                    doc.text(`Total de Aulas: ${report.total}`, 20, 106);
+                    doc.text(`Percentual de Presença: ${report.percentage}%`, 20, 113);
+                    const status = parseFloat(report.percentage) >= 75 ? 'APROVADO' : 'REPROVADO por falta';
+                    doc.setFontSize(14); doc.setFont(undefined, 'bold');
+                    doc.text(`Situação Final: ${status}`, 20, 125);
+                    if (selectedStudent.exitObservation) {
+                        doc.setFontSize(10); doc.setFont(undefined, 'bold'); doc.text('Observações:', 20, 145);
+                        doc.setFont(undefined, 'normal');
+                        const lines = doc.splitTextToSize(selectedStudent.exitObservation, 170);
+                        doc.text(lines, 20, 152);
+                    }
+                    doc.save(`historico_${selectedStudent.name.replace(/\s/g, '_')}.pdf`);
+                    showToast('PDF do histórico gerado com sucesso!', 'success');
+                    setShowReportModal(false);
+                } catch (e) { showToast('Erro ao gerar PDF!', 'error'); }
+            };
             
-            return { student, presente, falta, justificada, total, percentage };
-        } catch (e) {
-            console.error('Erro ao gerar relatório:', e);
-            return null;
-        }
-    };
-    
-    // Gera PDF do histórico do aluno
-    const generateHistoryPDF = () => {
-        if (!selectedStudent) return;
-        
-        const report = generateStudentReport(selectedStudent);
-        if (!report) {
-            showToast('Erro ao gerar relatório!', 'error');
-            return;
-        }
-        
-        try {
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF();
-            
-            // Título
-            doc.setFontSize(20);
-            doc.setFont(undefined, 'bold');
-            doc.text('Histórico de Frequência do Aluno', 105, 20, { align: 'center' });
-            
-            // Status
-            const statusText = selectedStudent.status === 'transferido' ? '🔄 TRANSFERIDO' : '🕊️ FALECIDO';
-            const statusColor = selectedStudent.status === 'transferido' ? [255, 140, 0] : [100, 100, 100];
-            doc.setFontSize(14);
-            doc.setTextColor(...statusColor);
-            doc.text(statusText, 105, 30, { align: 'center' });
-            doc.setTextColor(0, 0, 0);
-            
-            // Info do aluno
-            doc.setFontSize(12);
-            doc.setFont(undefined, 'normal');
-            doc.text(`Turma: ${selectedStudent.className}`, 20, 45);
-            doc.text(`Aluno: ${selectedStudent.name}`, 20, 52);
-            if (selectedStudent.exitDate) {
-                doc.text(`Data de Saída: ${new Date(selectedStudent.exitDate + 'T00:00:00').toLocaleDateString('pt-BR')}`, 20, 59);
-            }
-            
-            // Estatísticas
-            doc.setFontSize(14);
-            doc.setFont(undefined, 'bold');
-            const titulo = selectedStudent.exitDate ? 'Frequência até a Data de Saída:' : 'Frequência Total:';
-            doc.text(titulo, 20, 75);
-            
-            doc.setFontSize(12);
-            doc.setFont(undefined, 'normal');
-            doc.text(`Presenças: ${report.presente}`, 20, 85);
-            doc.text(`Faltas: ${report.falta}`, 20, 92);
-            doc.text(`Justificadas: ${report.justificada}`, 20, 99);
-            doc.text(`Total de Aulas: ${report.total}`, 20, 106);
-            doc.text(`Percentual de Presença: ${report.percentage}%`, 20, 113);
-            
-            // Situação final
-            const status = parseFloat(report.percentage) >= 75 ? 'APROVADO' : 'REPROVADO por falta';
-            doc.setFontSize(14);
-            doc.setFont(undefined, 'bold');
-            doc.text(`Situação Final: ${status}`, 20, 125);
-            
-            // Motivo da saída
-            doc.setFontSize(10);
-            doc.setFont(undefined, 'normal');
-            const motivo = selectedStudent.status === 'transferido' 
-                ? 'Motivo: Transferência de escola' 
-                : 'Motivo: Falecimento';
-            doc.text(motivo, 20, 140);
-            
-            // Observações se houver
-            if (selectedStudent.exitObservation) {
-                doc.setFontSize(10);
-                doc.setFont(undefined, 'bold');
-                doc.text('Observações:', 20, 155);
-                doc.setFont(undefined, 'normal');
-                const lines = doc.splitTextToSize(selectedStudent.exitObservation, 170);
-                doc.text(lines, 20, 162);
-            }
-            
-            doc.save(`historico_${selectedStudent.name.replace(/\s/g, '_')}.pdf`);
-            showToast('PDF do histórico gerado com sucesso!', 'success');
-            setShowReportModal(false);
-        } catch (e) {
-            console.error('Erro ao gerar PDF:', e);
-            showToast('Erro ao gerar PDF!', 'error');
-        }
-    };
-    
-    return (
-        <div className="space-y-6">
-            <div className="bg-white p-6 rounded-xl shadow-lg">
-                <h2 className="text-2xl font-bold mb-4">📋 Histórico de Alunos</h2>
-                <p className="text-gray-600 mb-4">Consulte alunos transferidos e falecidos com seus registros de frequência</p>
-                
-                {/* Filtros */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                    <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-2">📌 Filtrar por Status:</label>
-                        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}
-                            className="w-full px-4 py-3 border-2 rounded-lg focus:border-indigo-500 outline-none">
-                            <option value="todos">Todos</option>
-                            <option value="transferido">🔄 Transferidos</option>
-                            <option value="falecido">🕊️ Falecidos</option>
-                        </select>
-                    </div>
-                    
-                    <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-2">🏫 Filtrar por Turma:</label>
-                        <select value={selectedClass || ''} onChange={(e) => setSelectedClass(Number(e.target.value) || null)}
-                            className="w-full px-4 py-3 border-2 rounded-lg focus:border-indigo-500 outline-none">
-                            <option value="">Todas as turmas</option>
-                            {classes && classes.map(c => (
-                                <option key={c.id} value={c.id}>{c.name}</option>
-                            ))}
-                        </select>
-                    </div>
-                </div>
-                
-                {/* Estatísticas */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                    <div className="bg-orange-50 p-4 rounded-lg border-2 border-orange-200">
-                        <div className="text-2xl mb-1">🔄</div>
-                        <div className="text-sm text-gray-600">Transferidos</div>
-                        <div className="text-2xl font-bold text-orange-600">
-                            {allInactive.filter(s => s.status === 'transferido').length}
-                        </div>
-                    </div>
-                    
-                    <div className="bg-gray-100 p-4 rounded-lg border-2 border-gray-300">
-                        <div className="text-2xl mb-1">🕊️</div>
-                        <div className="text-sm text-gray-600">Falecidos</div>
-                        <div className="text-2xl font-bold text-gray-600">
-                            {allInactive.filter(s => s.status === 'falecido').length}
-                        </div>
-                    </div>
-                    
-                    <div className="bg-indigo-50 p-4 rounded-lg border-2 border-indigo-200">
-                        <div className="text-2xl mb-1">📊</div>
-                        <div className="text-sm text-gray-600">Total</div>
-                        <div className="text-2xl font-bold text-indigo-600">
-                            {allInactive.length}
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            {/* Lista de alunos */}
-            {displayStudents.length === 0 ? (
-                <div className="bg-white p-12 rounded-xl shadow-lg text-center">
-                    <div className="text-6xl mb-4">📋</div>
-                    <p className="text-xl text-gray-600">Nenhum aluno encontrado</p>
-                    <p className="text-gray-500 mt-2">Não há alunos transferidos ou falecidos ainda</p>
-                </div>
-            ) : (
-                <div className="bg-white p-6 rounded-xl shadow-lg">
-                    <h3 className="text-xl font-bold mb-4">
-                        {displayStudents.length} aluno(s) encontrado(s)
-                    </h3>
-                    
-                    <div className="space-y-3">
-                        {displayStudents.map(student => {
-                            const report = generateStudentReport(student);
-                            return (
-                                <div key={student.id} 
-                                    className={`border-2 rounded-lg p-4 ${
-                                        student.status === 'transferido' ? 'bg-orange-50 border-orange-200' : 'bg-gray-50 border-gray-300'
-                                    }`}>
-                                    <div className="flex items-center justify-between mb-3">
-                                        <div className="flex-1">
-                                            <div className="flex items-center gap-3">
-                                                <span className="text-2xl">
-                                                    {student.status === 'transferido' ? '🔄' : '🕊️'}
-                                                </span>
-                                                <div>
-                                                    <p className="font-bold text-lg">{student.name}</p>
-                                                    <p className="text-sm text-gray-600">
-                                                        {student.className} • 
-                                                        {student.status === 'transferido' ? ' Transferido' : ' Falecido'}
-                                                        {student.exitDate && ` em ${new Date(student.exitDate + 'T00:00:00').toLocaleDateString('pt-BR')}`}
-                                                        {!student.exitDate && ' (sem data registrada)'}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        
-                                        <button 
-                                            onClick={() => {
-                                                setSelectedStudent(student);
-                                                setShowReportModal(true);
-                                            }}
-                                            className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-indigo-700 transition">
-                                            📄 Ver Relatório
-                                        </button>
-                                    </div>
-                                    
-                                    {report && (
-                                        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
-                                            <div className="text-center p-2 bg-white rounded">
-                                                <div className="text-green-600 font-bold">{report.presente}</div>
-                                                <div className="text-gray-600">Presenças</div>
-                                            </div>
-                                            <div className="text-center p-2 bg-white rounded">
-                                                <div className="text-red-600 font-bold">{report.falta}</div>
-                                                <div className="text-gray-600">Faltas</div>
-                                            </div>
-                                            <div className="text-center p-2 bg-white rounded">
-                                                <div className="text-yellow-600 font-bold">{report.justificada}</div>
-                                                <div className="text-gray-600">Justificadas</div>
-                                            </div>
-                                            <div className="text-center p-2 bg-white rounded">
-                                                <div className="font-bold">{report.total}</div>
-                                                <div className="text-gray-600">Total</div>
-                                            </div>
-                                            <div className="text-center p-2 bg-white rounded">
-                                                <div className={`font-bold ${parseFloat(report.percentage) >= 75 ? 'text-green-600' : 'text-red-600'}`}>
-                                                    {report.percentage}%
-                                                </div>
-                                                <div className="text-gray-600">Presença</div>
-                                            </div>
-                                        </div>
-                                    )}
-                                    
-                                    {student.exitObservation && (
-                                        <div className="mt-3 p-3 bg-white rounded border-l-4 border-indigo-500">
-                                            <p className="text-sm font-semibold text-gray-700">Observações:</p>
-                                            <p className="text-sm text-gray-600 mt-1">{student.exitObservation}</p>
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-            )}
-            
-            {/* Modal de Relatório */}
-            {showReportModal && selectedStudent && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-xl p-6 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
-                        <h3 className="text-2xl font-bold mb-4">
-                            {selectedStudent.status === 'transferido' ? '🔄' : '🕊️'} Relatório do Aluno
-                        </h3>
-                        
-                        <div className="mb-6">
-                            <p className="text-lg font-bold">{selectedStudent.name}</p>
-                            <p className="text-gray-600">{selectedStudent.className}</p>
-                            {selectedStudent.exitDate ? (
-                                <p className="text-sm text-gray-500 mt-1">
-                                    Data de saída: {new Date(selectedStudent.exitDate + 'T00:00:00').toLocaleDateString('pt-BR')}
-                                </p>
-                            ) : (
-                                <p className="text-sm text-yellow-600 mt-1">
-                                    ⚠️ Data de saída não registrada
-                                </p>
-                            )}
-                        </div>
-                        
-                        {(() => {
-                            const report = generateStudentReport(selectedStudent);
-                            return report && (
-                                <div className="bg-gray-50 p-6 rounded-lg mb-6">
-                                    <h4 className="font-bold mb-4">
-                                        {selectedStudent.exitDate ? 'Frequência até a Data de Saída:' : 'Frequência Total:'}
-                                    </h4>
-                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                                        <div className="text-center p-4 bg-white rounded-lg">
-                                            <div className="text-3xl font-bold text-green-600">{report.presente}</div>
-                                            <div className="text-sm text-gray-600">Presenças</div>
-                                        </div>
-                                        <div className="text-center p-4 bg-white rounded-lg">
-                                            <div className="text-3xl font-bold text-red-600">{report.falta}</div>
-                                            <div className="text-sm text-gray-600">Faltas</div>
-                                        </div>
-                                        <div className="text-center p-4 bg-white rounded-lg">
-                                            <div className="text-3xl font-bold text-yellow-600">{report.justificada}</div>
-                                            <div className="text-sm text-gray-600">Justificadas</div>
-                                        </div>
-                                        <div className="text-center p-4 bg-white rounded-lg">
-                                            <div className="text-3xl font-bold">{report.total}</div>
-                                            <div className="text-sm text-gray-600">Total</div>
-                                        </div>
-                                        <div className="text-center p-4 bg-white rounded-lg col-span-2">
-                                            <div className={`text-3xl font-bold ${parseFloat(report.percentage) >= 75 ? 'text-green-600' : 'text-red-600'}`}>
-                                                {report.percentage}%
-                                            </div>
-                                            <div className="text-sm text-gray-600">Percentual de Presença</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })()}
-                        
-                        {selectedStudent.exitObservation && (
-                            <div className="bg-yellow-50 p-4 rounded-lg mb-6 border-2 border-yellow-200">
-                                <p className="font-bold mb-2">📝 Observações:</p>
-                                <p className="text-gray-700">{selectedStudent.exitObservation}</p>
+            return (
+                <div className="space-y-6">
+                    <div className="bg-white p-6 rounded-xl shadow-lg">
+                        <h2 className="text-2xl font-bold mb-4">📋 Histórico de Alunos</h2>
+                        <p className="text-gray-600 mb-4">Consulte alunos transferidos e falecidos com seus registros de frequência</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-2">📌 Filtrar por Status:</label>
+                                <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}
+                                    className="w-full px-4 py-3 border-2 rounded-lg focus:border-indigo-500 outline-none">
+                                    <option value="todos">Todos</option>
+                                    <option value="transferido">🔄 Transferidos</option>
+                                    <option value="falecido">🕊️ Falecidos</option>
+                                </select>
                             </div>
-                        )}
-                        
-                        <div className="flex gap-3">
-                            <button onClick={generateHistoryPDF} 
-                                className="flex-1 bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 transition">
-                                📄 Gerar PDF
-                            </button>
-                            <button onClick={() => setShowReportModal(false)} 
-                                className="flex-1 bg-gray-200 py-3 rounded-lg font-bold hover:bg-gray-300 transition">
-                                ❌ Fechar
-                            </button>
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-2">🏫 Filtrar por Turma:</label>
+                                <select value={selectedClass || ''} onChange={(e) => setSelectedClass(Number(e.target.value) || null)}
+                                    className="w-full px-4 py-3 border-2 rounded-lg focus:border-indigo-500 outline-none">
+                                    <option value="">Todas as turmas</option>
+                                    {classes && classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                </select>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                            <div className="bg-orange-50 p-4 rounded-lg border-2 border-orange-200">
+                                <div className="text-2xl mb-1">🔄</div>
+                                <div className="text-sm text-gray-600">Transferidos</div>
+                                <div className="text-2xl font-bold text-orange-600">{allInactive.filter(s => s.status === 'transferido').length}</div>
+                            </div>
+                            <div className="bg-gray-100 p-4 rounded-lg border-2 border-gray-300">
+                                <div className="text-2xl mb-1">🕊️</div>
+                                <div className="text-sm text-gray-600">Falecidos</div>
+                                <div className="text-2xl font-bold text-gray-600">{allInactive.filter(s => s.status === 'falecido').length}</div>
+                            </div>
+                            <div className="bg-indigo-50 p-4 rounded-lg border-2 border-indigo-200">
+                                <div className="text-2xl mb-1">📊</div>
+                                <div className="text-sm text-gray-600">Total</div>
+                                <div className="text-2xl font-bold text-indigo-600">{allInactive.length}</div>
+                            </div>
                         </div>
                     </div>
+                    
+                    {displayStudents.length === 0 ? (
+                        <div className="bg-white p-12 rounded-xl shadow-lg text-center">
+                            <div className="text-6xl mb-4">📋</div>
+                            <p className="text-xl text-gray-600">Nenhum aluno encontrado</p>
+                        </div>
+                    ) : (
+                        <div className="bg-white p-6 rounded-xl shadow-lg">
+                            <h3 className="text-xl font-bold mb-4">{displayStudents.length} aluno(s) encontrado(s)</h3>
+                            <div className="space-y-3">
+                                {displayStudents.map(student => {
+                                    const report = generateStudentReport(student);
+                                    return (
+                                        <div key={student.id} className={`border-2 rounded-lg p-4 ${student.status === 'transferido' ? 'bg-orange-50 border-orange-200' : 'bg-gray-50 border-gray-300'}`}>
+                                            <div className="flex items-center justify-between mb-3">
+                                                <div className="flex-1">
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="text-2xl">{student.status === 'transferido' ? '🔄' : '🕊️'}</span>
+                                                        <div>
+                                                            <p className="font-bold text-lg">{student.name}</p>
+                                                            <p className="text-sm text-gray-600">
+                                                                {student.className} • {student.status === 'transferido' ? ' Transferido' : ' Falecido'}
+                                                                {student.exitDate && ` em ${new Date(student.exitDate + 'T00:00:00').toLocaleDateString('pt-BR')}`}
+                                                                {!student.exitDate && ' (sem data registrada)'}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <button onClick={() => { setSelectedStudent(student); setShowReportModal(true); }}
+                                                    className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-indigo-700 transition">
+                                                    📄 Ver Relatório
+                                                </button>
+                                            </div>
+                                            {report && (
+                                                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+                                                    <div className="text-center p-2 bg-white rounded"><div className="text-green-600 font-bold">{report.presente}</div><div className="text-gray-600">Presenças</div></div>
+                                                    <div className="text-center p-2 bg-white rounded"><div className="text-red-600 font-bold">{report.falta}</div><div className="text-gray-600">Faltas</div></div>
+                                                    <div className="text-center p-2 bg-white rounded"><div className="text-yellow-600 font-bold">{report.justificada}</div><div className="text-gray-600">Justificadas</div></div>
+                                                    <div className="text-center p-2 bg-white rounded"><div className="font-bold">{report.total}</div><div className="text-gray-600">Total</div></div>
+                                                    <div className="text-center p-2 bg-white rounded"><div className={`font-bold ${parseFloat(report.percentage) >= 75 ? 'text-green-600' : 'text-red-600'}`}>{report.percentage}%</div><div className="text-gray-600">Presença</div></div>
+                                                </div>
+                                            )}
+                                            {student.exitObservation && (
+                                                <div className="mt-3 p-3 bg-white rounded border-l-4 border-indigo-500">
+                                                    <p className="text-sm font-semibold text-gray-700">Observações:</p>
+                                                    <p className="text-sm text-gray-600 mt-1">{student.exitObservation}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+                    
+                    {showReportModal && selectedStudent && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                            <div className="bg-white rounded-xl p-6 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
+                                <h3 className="text-2xl font-bold mb-4">{selectedStudent.status === 'transferido' ? '🔄' : '🕊️'} Relatório do Aluno</h3>
+                                <div className="mb-6">
+                                    <p className="text-lg font-bold">{selectedStudent.name}</p>
+                                    <p className="text-gray-600">{selectedStudent.className}</p>
+                                    {selectedStudent.exitDate ? (
+                                        <p className="text-sm text-gray-500 mt-1">Data de saída: {new Date(selectedStudent.exitDate + 'T00:00:00').toLocaleDateString('pt-BR')}</p>
+                                    ) : (
+                                        <p className="text-sm text-yellow-600 mt-1">⚠️ Data de saída não registrada</p>
+                                    )}
+                                </div>
+                                {(() => {
+                                    const report = generateStudentReport(selectedStudent);
+                                    return report && (
+                                        <div className="bg-gray-50 p-6 rounded-lg mb-6">
+                                            <h4 className="font-bold mb-4">{selectedStudent.exitDate ? 'Frequência até a Data de Saída:' : 'Frequência Total:'}</h4>
+                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                                <div className="text-center p-4 bg-white rounded-lg"><div className="text-3xl font-bold text-green-600">{report.presente}</div><div className="text-sm text-gray-600">Presenças</div></div>
+                                                <div className="text-center p-4 bg-white rounded-lg"><div className="text-3xl font-bold text-red-600">{report.falta}</div><div className="text-sm text-gray-600">Faltas</div></div>
+                                                <div className="text-center p-4 bg-white rounded-lg"><div className="text-3xl font-bold text-yellow-600">{report.justificada}</div><div className="text-sm text-gray-600">Justificadas</div></div>
+                                                <div className="text-center p-4 bg-white rounded-lg"><div className="text-3xl font-bold">{report.total}</div><div className="text-sm text-gray-600">Total</div></div>
+                                                <div className="text-center p-4 bg-white rounded-lg col-span-2">
+                                                    <div className={`text-3xl font-bold ${parseFloat(report.percentage) >= 75 ? 'text-green-600' : 'text-red-600'}`}>{report.percentage}%</div>
+                                                    <div className="text-sm text-gray-600">Percentual de Presença</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+                                {selectedStudent.exitObservation && (
+                                    <div className="bg-yellow-50 p-4 rounded-lg mb-6 border-2 border-yellow-200">
+                                        <p className="font-bold mb-2">📝 Observações:</p>
+                                        <p className="text-gray-700">{selectedStudent.exitObservation}</p>
+                                    </div>
+                                )}
+                                <div className="flex gap-3">
+                                    <button onClick={generateHistoryPDF} className="flex-1 bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 transition">📄 Gerar PDF</button>
+                                    <button onClick={() => setShowReportModal(false)} className="flex-1 bg-gray-200 py-3 rounded-lg font-bold hover:bg-gray-300 transition">❌ Fechar</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
-            )}
-        </div>
-    );
-}
-        {/* Continua com ConfigModal, UsersModal, ClassesModal e StudentsModal iguais ao original */}
+            );
+        }
         
         function ConfigModal({ onClose, showToast }) {
             const [apiKey, setApiKey] = useState(CloudSync.getKey());
             const [binId, setBinId] = useState(CloudSync.getBinId());
             const [showAdvanced, setShowAdvanced] = useState(false);
-            
             const handleSave = () => {
                 if (apiKey.trim()) {
                     localStorage.setItem('jsonbin_api_key', apiKey.trim());
-                    if (binId.trim()) {
-                        localStorage.setItem('syncBinId', binId.trim());
-                    }
+                    if (binId.trim()) localStorage.setItem('syncBinId', binId.trim());
                     showToast('Configuração salva com sucesso!', 'success');
                     onClose();
-                } else {
-                    showToast('Digite uma chave válida!', 'error');
-                }
+                } else { showToast('Digite uma chave válida!', 'error'); }
             };
-            
             return (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
                     <div className="bg-white rounded-xl p-6 w-full max-w-3xl max-h-[90vh] overflow-auto shadow-2xl">
                         <h2 className="text-2xl font-bold mb-4">⚙️ Configurações de Sincronização</h2>
-                        
                         <div className="bg-gradient-to-r from-green-50 to-blue-50 p-6 rounded-lg mb-4 border-2 border-green-200">
                             <h3 className="font-bold mb-3 text-lg">🎯 CONFIGURAÇÃO COMPARTILHADA (RECOMENDADO)</h3>
                             <div className="bg-white p-4 rounded-lg mb-3 border-2 border-blue-300">
@@ -1595,64 +1138,37 @@ function History({ classes, showToast }) {
                                     <li>Abra o arquivo HTML em um editor de texto</li>
                                     <li>Procure por <code className="bg-gray-200 px-2 py-1 rounded">SHARED_CONFIG</code></li>
                                     <li>Cole sua API Key em <code className="bg-gray-200 px-2 py-1 rounded">apiKey: ''</code></li>
-                                    <li>Após a primeira sincronização, o BIN ID aparecerá no console do navegador</li>
-                                    <li>Copie o BIN ID e cole em <code className="bg-gray-200 px-2 py-1 rounded">binId: ''</code></li>
-                                    <li>Salve o arquivo e compartilhe com sua equipe!</li>
+                                    <li>Após a primeira sincronização, o BIN ID aparecerá no console</li>
+                                    <li>Copie e cole em <code className="bg-gray-200 px-2 py-1 rounded">binId: ''</code></li>
+                                    <li>Salve e compartilhe!</li>
                                 </ol>
-                                <div className="mt-3 p-3 bg-yellow-100 rounded border border-yellow-300">
-                                    <p className="text-sm"><strong>💡 Vantagem:</strong> Todos acessam os mesmos dados sem precisar configurar nada! Basta abrir o link.</p>
-                                </div>
                             </div>
                         </div>
-                        
-                        <button 
-                            onClick={() => setShowAdvanced(!showAdvanced)}
-                            className="w-full mb-4 bg-gray-200 py-2 rounded-lg font-bold hover:bg-gray-300 transition">
+                        <button onClick={() => setShowAdvanced(!showAdvanced)} className="w-full mb-4 bg-gray-200 py-2 rounded-lg font-bold hover:bg-gray-300 transition">
                             {showAdvanced ? '▼' : '▶'} Configuração Individual (Avançado)
                         </button>
-                        
                         {showAdvanced && (
                             <>
-                                <div className="bg-blue-50 p-4 rounded-lg mb-4 border-2 border-blue-200">
-                                    <h3 className="font-bold mb-2">📡 Configuração Local (apenas este dispositivo)</h3>
-                                    <ol className="list-decimal list-inside space-y-1 text-sm mb-3">
-                                        <li>Acesse <a href="https://jsonbin.io" target="_blank" className="text-blue-600 underline">jsonbin.io</a></li>
-                                        <li>Crie uma conta gratuita</li>
-                                        <li>Copie sua API Key</li>
-                                        <li>Cole abaixo</li>
-                                    </ol>
-                                </div>
-                                
                                 <div className="mb-4">
                                     <label className="block text-sm font-bold text-gray-700 mb-2">🔑 Chave da API (JSONBin):</label>
                                     <input type="text" value={apiKey} onChange={(e) => setApiKey(e.target.value)}
                                         placeholder="Cole sua chave da API aqui..."
                                         className="w-full px-4 py-3 border-2 rounded-lg focus:border-indigo-500 outline-none font-mono text-sm" />
                                 </div>
-                                
                                 <div className="mb-4">
                                     <label className="block text-sm font-bold text-gray-700 mb-2">🆔 BIN ID (opcional):</label>
                                     <input type="text" value={binId} onChange={(e) => setBinId(e.target.value)}
-                                        placeholder="Cole o BIN ID para conectar a um banco existente..."
+                                        placeholder="Cole o BIN ID..."
                                         className="w-full px-4 py-3 border-2 rounded-lg focus:border-indigo-500 outline-none font-mono text-sm" />
-                                    <p className="text-xs text-gray-500 mt-1">Deixe vazio para criar um novo banco de dados</p>
                                 </div>
-                                
                                 <div className="flex gap-2">
-                                    <button onClick={handleSave} className="flex-1 bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 transition">
-                                        ✅ Salvar
-                                    </button>
-                                    <button onClick={onClose} className="flex-1 bg-gray-200 py-3 rounded-lg font-bold hover:bg-gray-300 transition">
-                                        ❌ Cancelar
-                                    </button>
+                                    <button onClick={handleSave} className="flex-1 bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 transition">✅ Salvar</button>
+                                    <button onClick={onClose} className="flex-1 bg-gray-200 py-3 rounded-lg font-bold hover:bg-gray-300 transition">❌ Cancelar</button>
                                 </div>
                             </>
                         )}
-                        
                         {!showAdvanced && (
-                            <button onClick={onClose} className="w-full bg-gray-200 py-3 rounded-lg font-bold hover:bg-gray-300 transition">
-                                ❌ Fechar
-                            </button>
+                            <button onClick={onClose} className="w-full bg-gray-200 py-3 rounded-lg font-bold hover:bg-gray-300 transition">❌ Fechar</button>
                         )}
                     </div>
                 </div>
@@ -1668,65 +1184,23 @@ function History({ classes, showToast }) {
             const [newPassword, setNewPassword] = useState('');
             
             const handleAdd = () => {
-                if (!login.trim() || !password.trim() || !name.trim()) {
-                    showToast('Preencha todos os campos!', 'error');
-                    return;
-                }
-                
-                if (users[login]) {
-                    showToast('Este login já existe!', 'error');
-                    return;
-                }
-                
+                if (!login.trim() || !password.trim() || !name.trim()) { showToast('Preencha todos os campos!', 'error'); return; }
+                if (users[login]) { showToast('Este login já existe!', 'error'); return; }
                 setUsers({ ...users, [login]: { password, name, role } });
-                showToast(`Usuário ${name} criado! Aguarde a sincronização...`, 'success');
-                setLogin('');
-                setPassword('');
-                setName('');
-                setRole('viewer');
-                
-                setTimeout(async () => {
-                    if (CloudSync.getKey()) {
-                        const result = await CloudSync.save({ classes, users: { ...users, [login]: { password, name, role } } });
-                        if (result.success) {
-                            showToast('Usuário sincronizado com a nuvem!', 'success');
-                        }
-                    }
-                }, 500);
+                showToast(`Usuário ${name} criado com sucesso!`, 'success');
+                setLogin(''); setPassword(''); setName(''); setRole('viewer');
             };
             
             const handleChangePassword = (userLogin) => {
-                if (!newPassword.trim()) {
-                    showToast('Digite a nova senha!', 'error');
-                    return;
-                }
-                
-                const updatedUsers = {
-                    ...users,
-                    [userLogin]: { ...users[userLogin], password: newPassword.trim() }
-                };
-                
+                if (!newPassword.trim()) { showToast('Digite a nova senha!', 'error'); return; }
+                const updatedUsers = { ...users, [userLogin]: { ...users[userLogin], password: newPassword.trim() } };
                 setUsers(updatedUsers);
-                showToast(`Senha de ${users[userLogin].name} alterada! Aguarde a sincronização...`, 'success');
-                setEditingUser(null);
-                setNewPassword('');
-                
-                setTimeout(async () => {
-                    if (CloudSync.getKey()) {
-                        const result = await CloudSync.save({ classes, users: updatedUsers });
-                        if (result.success) {
-                            showToast('Senha sincronizada com a nuvem!', 'success');
-                        }
-                    }
-                }, 500);
+                showToast(`Senha de ${users[userLogin].name} alterada!`, 'success');
+                setEditingUser(null); setNewPassword('');
             };
             
             const handleDelete = (userLogin) => {
-                if (userLogin === 'admin') {
-                    showToast('Não é possível excluir o administrador principal!', 'error');
-                    return;
-                }
-                
+                if (userLogin === 'admin') { showToast('Não é possível excluir o administrador principal!', 'error'); return; }
                 if (confirm(`⚠️ Excluir o usuário "${users[userLogin].name}"?`)) {
                     const newUsers = { ...users };
                     delete newUsers[userLogin];
@@ -1739,32 +1213,26 @@ function History({ classes, showToast }) {
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
                     <div className="bg-white rounded-xl p-6 w-full max-w-3xl max-h-[90vh] overflow-auto shadow-2xl">
                         <h2 className="text-2xl font-bold mb-4">👥 Gerenciar Usuários</h2>
-                        
                         <div className="bg-green-50 p-4 rounded-lg mb-4 border-2 border-green-200">
                             <h3 className="font-bold mb-3">➕ Criar Novo Usuário</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-                                <input value={login} onChange={(e) => setLogin(e.target.value)}
-                                    placeholder="Login (usuário)" 
-                                    className="px-4 py-3 border-2 rounded-lg focus:border-green-500 outline-none" />
-                                <input value={password} onChange={(e) => setPassword(e.target.value)}
-                                    type="password"
-                                    placeholder="Senha" 
-                                    className="px-4 py-3 border-2 rounded-lg focus:border-green-500 outline-none" />
-                                <input value={name} onChange={(e) => setName(e.target.value)}
-                                    placeholder="Nome completo" 
-                                    className="px-4 py-3 border-2 rounded-lg focus:border-green-500 outline-none" />
-                                <select value={role} onChange={(e) => setRole(e.target.value)}
-                                    className="px-4 py-3 border-2 rounded-lg focus:border-green-500 outline-none bg-white">
-                                    <option value="admin">👑 Administrador</option>
-                                    <option value="editor">✏️ Editor</option>
-                                    <option value="viewer">👁️ Visualizador</option>
+                                <input value={login} onChange={(e) => setLogin(e.target.value)} placeholder="Login (usuário)" className="px-4 py-3 border-2 rounded-lg focus:border-green-500 outline-none" />
+                                <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="Senha" className="px-4 py-3 border-2 rounded-lg focus:border-green-500 outline-none" />
+                                <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome completo" className="px-4 py-3 border-2 rounded-lg focus:border-green-500 outline-none" />
+                                <select value={role} onChange={(e) => setRole(e.target.value)} className="px-4 py-3 border-2 rounded-lg focus:border-green-500 outline-none bg-white">
+                                    <option value="admin">👑 Administrador (acesso total)</option>
+                                    <option value="editor">✏️ Editor (preenche chamada)</option>
+                                    <option value="viewer">👁️ Visualizador (somente leitura)</option>
                                 </select>
                             </div>
-                            <button onClick={handleAdd} className="w-full bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 transition">
-                                ✅ Criar Usuário
-                            </button>
+                            <div className="mb-3 bg-blue-50 p-3 rounded-lg border border-blue-200 text-sm text-blue-800">
+                                <strong>Permissões por perfil:</strong><br/>
+                                👑 <strong>Admin:</strong> tudo (turmas, alunos, usuários, PDFs, histórico)<br/>
+                                ✏️ <strong>Editor:</strong> dashboard + preenchimento de chamada + relatórios (sem PDF)<br/>
+                                👁️ <strong>Visualizador:</strong> dashboard + visualização de chamada + relatórios (sem PDF)
+                            </div>
+                            <button onClick={handleAdd} className="w-full bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 transition">✅ Criar Usuário</button>
                         </div>
-                        
                         <div className="space-y-2">
                             <h3 className="font-bold mb-2">📋 Usuários Cadastrados:</h3>
                             {Object.entries(users).map(([userLogin, userData]) => (
@@ -1774,46 +1242,31 @@ function History({ classes, showToast }) {
                                             <p className="font-bold text-lg">{userData.name}</p>
                                             <p className="text-sm text-gray-600">Login: {userLogin} | Função: {userData.role === 'admin' ? '👑 Admin' : userData.role === 'editor' ? '✏️ Editor' : '👁️ Visualizador'}</p>
                                         </div>
-                                        <button 
-                                            onClick={() => setEditingUser(editingUser === userLogin ? null : userLogin)}
+                                        <button onClick={() => setEditingUser(editingUser === userLogin ? null : userLogin)}
                                             className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition">
                                             🔑 {editingUser === userLogin ? 'Cancelar' : 'Alterar Senha'}
                                         </button>
                                         {userLogin !== 'admin' && (
-                                            <button onClick={() => handleDelete(userLogin)} 
-                                                className="text-red-600 px-4 py-2 hover:bg-red-50 rounded-lg font-semibold transition">
-                                                🗑️ Excluir
-                                            </button>
+                                            <button onClick={() => handleDelete(userLogin)} className="text-red-600 px-4 py-2 hover:bg-red-50 rounded-lg font-semibold transition">🗑️ Excluir</button>
                                         )}
                                     </div>
-                                    
                                     {editingUser === userLogin && (
                                         <div className="bg-yellow-50 p-3 rounded-lg border-2 border-yellow-200">
                                             <h4 className="font-bold mb-2 text-sm">🔑 Alterar Senha de {userData.name}</h4>
                                             <div className="flex gap-2">
-                                                <input 
-                                                    type="password"
-                                                    value={newPassword}
-                                                    onChange={(e) => setNewPassword(e.target.value)}
+                                                <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
                                                     placeholder="Digite a nova senha"
                                                     className="flex-1 px-4 py-2 border-2 rounded-lg focus:border-yellow-500 outline-none"
-                                                    onKeyPress={(e) => e.key === 'Enter' && handleChangePassword(userLogin)}
-                                                />
-                                                <button 
-                                                    onClick={() => handleChangePassword(userLogin)}
-                                                    className="bg-yellow-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-yellow-700 transition">
-                                                    ✅ Salvar
-                                                </button>
+                                                    onKeyPress={(e) => e.key === 'Enter' && handleChangePassword(userLogin)} />
+                                                <button onClick={() => handleChangePassword(userLogin)}
+                                                    className="bg-yellow-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-yellow-700 transition">✅ Salvar</button>
                                             </div>
                                         </div>
                                     )}
                                 </div>
                             ))}
                         </div>
-                        
-                        <button onClick={onClose} className="w-full mt-4 bg-gray-200 py-3 rounded-lg font-bold hover:bg-gray-300 transition">
-                            ❌ Fechar
-                        </button>
+                        <button onClick={onClose} className="w-full mt-4 bg-gray-200 py-3 rounded-lg font-bold hover:bg-gray-300 transition">❌ Fechar</button>
                     </div>
                 </div>
             );
@@ -1821,24 +1274,12 @@ function History({ classes, showToast }) {
         
         function ClassesModal({ classes, setClasses, onClose, showToast }) {
             const [name, setName] = useState('');
-            
             const handleAdd = () => {
-                if (!name.trim()) {
-                    showToast('Digite o nome da turma!', 'error');
-                    return;
-                }
-                
-                const newClass = {
-                    id: Date.now(),
-                    name: name.trim(),
-                    students: []
-                };
-                
-                setClasses([...classes, newClass]);
+                if (!name.trim()) { showToast('Digite o nome da turma!', 'error'); return; }
+                setClasses([...classes, { id: Date.now(), name: name.trim(), students: [] }]);
                 showToast(`Turma "${name.trim()}" criada com sucesso!`, 'success');
                 setName('');
             };
-            
             const handleDelete = (id) => {
                 const cls = classes.find(c => c.id === id);
                 if (confirm(`⚠️ Excluir a turma "${cls.name}"? Todos os dados serão perdidos!`)) {
@@ -1846,25 +1287,19 @@ function History({ classes, showToast }) {
                     showToast('Turma excluída com sucesso!', 'success');
                 }
             };
-            
             return (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
                     <div className="bg-white rounded-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
                         <h2 className="text-2xl font-bold mb-4">🏫 Gerenciar Turmas</h2>
-                        
                         <div className="bg-green-50 p-4 rounded-lg mb-4 border-2 border-green-200">
                             <h3 className="font-bold mb-3">➕ Criar Nova Turma</h3>
                             <div className="flex gap-2">
-                                <input value={name} onChange={(e) => setName(e.target.value)}
-                                    placeholder="Nome da turma (ex: 5º Ano A)" 
+                                <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome da turma (ex: 5º Ano A)"
                                     className="flex-1 px-4 py-3 border-2 rounded-lg focus:border-green-500 outline-none"
                                     onKeyPress={(e) => e.key === 'Enter' && handleAdd()} />
-                                <button onClick={handleAdd} className="bg-green-600 text-white px-8 py-3 rounded-lg font-bold hover:bg-green-700 transition">
-                                    ✅ Criar
-                                </button>
+                                <button onClick={handleAdd} className="bg-green-600 text-white px-8 py-3 rounded-lg font-bold hover:bg-green-700 transition">✅ Criar</button>
                             </div>
                         </div>
-                        
                         <div className="space-y-2 mb-4">
                             <h3 className="font-bold mb-2">📋 Turmas Cadastradas ({classes.length}):</h3>
                             {classes.length === 0 ? (
@@ -1873,24 +1308,15 @@ function History({ classes, showToast }) {
                                 <div className="max-h-96 overflow-y-auto space-y-2">
                                     {classes.map(c => (
                                         <div key={c.id} className="flex items-center gap-3 p-4 border-2 rounded-lg bg-white hover:bg-gray-50 transition">
-                                            <div className="flex-1">
-                                                <p className="font-bold text-lg">{c.name}</p>
-                                                <p className="text-sm text-gray-600">{c.students.length} aluno(s)</p>
-                                            </div>
-                                            <button onClick={() => handleDelete(c.id)} 
-                                                className="text-red-600 px-4 py-2 hover:bg-red-50 rounded-lg font-semibold transition">
-                                                🗑️ Excluir
-                                            </button>
+                                            <div className="flex-1"><p className="font-bold text-lg">{c.name}</p><p className="text-sm text-gray-600">{c.students.length} aluno(s)</p></div>
+                                            <button onClick={() => handleDelete(c.id)} className="text-red-600 px-4 py-2 hover:bg-red-50 rounded-lg font-semibold transition">🗑️ Excluir</button>
                                         </div>
                                     ))}
                                 </div>
                             )}
                         </div>
-                        
                         <div className="sticky bottom-0 bg-white pt-4 border-t-2">
-                            <button onClick={onClose} className="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 transition shadow-lg">
-                                ❌ Fechar
-                            </button>
+                            <button onClick={onClose} className="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 transition shadow-lg">❌ Fechar</button>
                         </div>
                     </div>
                 </div>
@@ -1906,144 +1332,55 @@ function History({ classes, showToast }) {
             const [exitObservation, setExitObservation] = useState('');
             const [posCenso, setPosCenso] = useState(false);
             
-            // Função para ordenar alunos: alfabético para normais, no final para pós-censo
             const sortStudents = (students) => {
                 const normais = students.filter(s => !s.posCenso).sort((a, b) => a.name.localeCompare(b.name));
-                const posCenso = students.filter(s => s.posCenso).sort((a, b) => a.name.localeCompare(b.name));
-                return [...normais, ...posCenso];
+                const pc = students.filter(s => s.posCenso).sort((a, b) => a.name.localeCompare(b.name));
+                return [...normais, ...pc];
             };
             
             const handleAdd = () => {
-                if (!name.trim()) {
-                    showToast('Digite o nome do aluno!', 'error');
-                    return;
-                }
-                
-                const newStudent = {
-                    id: Date.now(),
-                    name: name.trim(),
-                    status: 'ativo',
-                    posCenso: posCenso,
-                    attendance: {},
-                    observations: {},
-                    exitDate: null,
-                    exitObservation: ''
-                };
-                
-                setClasses(classes.map(c => 
-                    c.id === cls.id 
-                        ? { ...c, students: sortStudents([...c.students, newStudent]) }
-                        : c
-                ));
-                
-                const tipo = posCenso ? '(Pós-censo)' : '';
-                showToast(`Aluno ${tipo} adicionado com sucesso!`, 'success');
-                setName('');
-                setPosCenso(false);
+                if (!name.trim()) { showToast('Digite o nome do aluno!', 'error'); return; }
+                const newStudent = { id: Date.now(), name: name.trim(), status: 'ativo', posCenso, attendance: {}, observations: {}, exitDate: null, exitObservation: '' };
+                setClasses(classes.map(c => c.id === cls.id ? { ...c, students: sortStudents([...c.students, newStudent]) } : c));
+                showToast(`Aluno ${posCenso ? '(Pós-censo) ' : ''}adicionado com sucesso!`, 'success');
+                setName(''); setPosCenso(false);
             };
             
             const handleBulkAdd = () => {
-                if (!bulkInput.trim()) {
-                    showToast('Cole a lista de alunos!', 'error');
-                    return;
-                }
-                
-                const lines = bulkInput.split('\n').map(line => line.trim()).filter(line => line.length > 0);
-                
-                if (lines.length === 0) {
-                    showToast('Nenhum nome válido encontrado!', 'error');
-                    return;
-                }
-                
-                const newStudents = lines.map((studentName, index) => ({
-                    id: Date.now() + index,
-                    name: studentName,
-                    status: 'ativo',
-                    posCenso: posCenso,
-                    attendance: {},
-                    observations: {},
-                    exitDate: null,
-                    exitObservation: ''
-                }));
-                
-                setClasses(classes.map(c => 
-                    c.id === cls.id 
-                        ? { ...c, students: sortStudents([...c.students, ...newStudents]) }
-                        : c
-                ));
-                
-                const tipo = posCenso ? '(Pós-censo)' : '';
-                showToast(`${newStudents.length} aluno(s) ${tipo} adicionado(s) com sucesso!`, 'success');
-                setBulkInput('');
-                setShowBulkAdd(false);
-                setPosCenso(false);
+                if (!bulkInput.trim()) { showToast('Cole a lista de alunos!', 'error'); return; }
+                const lines = bulkInput.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+                if (lines.length === 0) { showToast('Nenhum nome válido encontrado!', 'error'); return; }
+                const newStudents = lines.map((studentName, index) => ({ id: Date.now() + index, name: studentName, status: 'ativo', posCenso, attendance: {}, observations: {}, exitDate: null, exitObservation: '' }));
+                setClasses(classes.map(c => c.id === cls.id ? { ...c, students: sortStudents([...c.students, ...newStudents]) } : c));
+                showToast(`${newStudents.length} aluno(s) adicionado(s) com sucesso!`, 'success');
+                setBulkInput(''); setShowBulkAdd(false); setPosCenso(false);
             };
             
             const handleStatusChange = (studentId, newStatus) => {
-                // Se mudou para transferido ou falecido, pede data e observação
+                setClasses(classes.map(c => c.id === cls.id ? { ...c, students: c.students.map(s => s.id === studentId ? { ...s, status: newStatus } : s) } : c));
                 if (newStatus !== 'ativo') {
                     const student = cls.students.find(s => s.id === studentId);
-                    
-                    // IMPORTANTE: Já muda o status do aluno agora
-                    setClasses(classes.map(c =>
-                        c.id === cls.id
-                            ? { ...c, students: c.students.map(s => 
-                                s.id === studentId ? { ...s, status: newStatus } : s
-                            )}
-                            : c
-                    ));
-                    
                     setEditingExit(studentId);
                     setExitDate(student.exitDate || new Date().toISOString().split('T')[0]);
                     setExitObservation(student.exitObservation || '');
                 } else {
-                    // Se voltou para ativo, limpa data e observação
-                    setClasses(classes.map(c =>
-                        c.id === cls.id
-                            ? { ...c, students: c.students.map(s => 
-                                s.id === studentId ? { ...s, status: newStatus, exitDate: null, exitObservation: '' } : s
-                            )}
-                            : c
-                    ));
+                    setClasses(classes.map(c => c.id === cls.id ? { ...c, students: c.students.map(s => s.id === studentId ? { ...s, status: newStatus, exitDate: null, exitObservation: '' } : s) } : c));
                 }
             };
             
             const confirmStatusChange = (studentId) => {
-                if (!exitDate) {
-                    showToast('Digite a data de saída!', 'error');
-                    return;
-                }
-                
-                // Pega o status atual do aluno (já foi mudado em handleStatusChange)
+                if (!exitDate) { showToast('Digite a data de saída!', 'error'); return; }
                 const currentStudent = cls.students.find(s => s.id === studentId);
-                
-                setClasses(classes.map(c =>
-                    c.id === cls.id
-                        ? { ...c, students: c.students.map(s => 
-                            s.id === studentId ? { 
-                                ...s,
-                                exitDate: exitDate,
-                                exitObservation: exitObservation.trim()
-                            } : s
-                        )}
-                        : c
-                ));
-                
+                setClasses(classes.map(c => c.id === cls.id ? { ...c, students: c.students.map(s => s.id === studentId ? { ...s, exitDate, exitObservation: exitObservation.trim() } : s) } : c));
                 const statusText = currentStudent.status === 'transferido' ? 'Transferência' : 'Falecimento';
                 showToast(`${statusText} registrado com sucesso!`, 'success');
-                setEditingExit(null);
-                setExitDate(new Date().toISOString().split('T')[0]);
-                setExitObservation('');
+                setEditingExit(null); setExitDate(new Date().toISOString().split('T')[0]); setExitObservation('');
             };
             
             const handleDelete = (studentId) => {
                 const student = cls.students.find(s => s.id === studentId);
                 if (confirm(`⚠️ Excluir o aluno "${student.name}"? Todos os registros serão perdidos!`)) {
-                    setClasses(classes.map(c =>
-                        c.id === cls.id
-                            ? { ...c, students: c.students.filter(s => s.id !== studentId) }
-                            : c
-                    ));
+                    setClasses(classes.map(c => c.id === cls.id ? { ...c, students: c.students.filter(s => s.id !== studentId) } : c));
                     showToast('Aluno excluído com sucesso!', 'success');
                 }
             };
@@ -2052,43 +1389,23 @@ function History({ classes, showToast }) {
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
                     <div className="bg-white rounded-xl p-6 w-full max-w-3xl max-h-[90vh] overflow-auto shadow-2xl">
                         <h2 className="text-2xl font-bold mb-4">👨‍🎓 Gerenciar Alunos - {cls.name}</h2>
-                        
                         <div className="flex gap-2 mb-4">
-                            <button 
-                                onClick={() => setShowBulkAdd(false)}
-                                className={`flex-1 py-2 rounded-lg font-bold transition ${!showBulkAdd ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>
-                                ➕ Adicionar Individual
-                            </button>
-                            <button 
-                                onClick={() => setShowBulkAdd(true)}
-                                className={`flex-1 py-2 rounded-lg font-bold transition ${showBulkAdd ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>
-                                📋 Adicionar Vários
-                            </button>
+                            <button onClick={() => setShowBulkAdd(false)} className={`flex-1 py-2 rounded-lg font-bold transition ${!showBulkAdd ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>➕ Adicionar Individual</button>
+                            <button onClick={() => setShowBulkAdd(true)} className={`flex-1 py-2 rounded-lg font-bold transition ${showBulkAdd ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>📋 Adicionar Vários</button>
                         </div>
-                        
                         {!showBulkAdd ? (
                             <div className="bg-blue-50 p-4 rounded-lg mb-4 border-2 border-blue-200">
                                 <h3 className="font-bold mb-3">➕ Adicionar Novo Aluno</h3>
                                 <div className="space-y-3">
                                     <div className="flex gap-2">
-                                        <input value={name} onChange={(e) => setName(e.target.value)}
-                                            placeholder="Nome completo do aluno" 
-                                            className="flex-1 px-4 py-3 border-2 rounded-lg focus:border-blue-500 outline-none" 
+                                        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome completo do aluno"
+                                            className="flex-1 px-4 py-3 border-2 rounded-lg focus:border-blue-500 outline-none"
                                             onKeyPress={(e) => e.key === 'Enter' && handleAdd()} />
-                                        <button onClick={handleAdd} className="bg-blue-600 text-white px-8 py-3 rounded-lg font-bold hover:bg-blue-700 transition">
-                                            ✅ Adicionar
-                                        </button>
+                                        <button onClick={handleAdd} className="bg-blue-600 text-white px-8 py-3 rounded-lg font-bold hover:bg-blue-700 transition">✅ Adicionar</button>
                                     </div>
                                     <label className="flex items-center gap-2 cursor-pointer">
-                                        <input 
-                                            type="checkbox" 
-                                            checked={posCenso}
-                                            onChange={(e) => setPosCenso(e.target.checked)}
-                                            className="w-5 h-5 rounded border-2 border-blue-500"
-                                        />
-                                        <span className="font-semibold text-blue-800">
-                                            📅 Matrícula Pós-Censo (aluno será colocado no final da lista)
-                                        </span>
+                                        <input type="checkbox" checked={posCenso} onChange={(e) => setPosCenso(e.target.checked)} className="w-5 h-5 rounded border-2 border-blue-500" />
+                                        <span className="font-semibold text-blue-800">📅 Matrícula Pós-Censo (aluno será colocado no final da lista)</span>
                                     </label>
                                 </div>
                             </div>
@@ -2096,30 +1413,16 @@ function History({ classes, showToast }) {
                             <div className="bg-purple-50 p-4 rounded-lg mb-4 border-2 border-purple-200">
                                 <h3 className="font-bold mb-3">📋 Adicionar Vários Alunos de Uma Vez</h3>
                                 <p className="text-sm text-gray-600 mb-3">Cole a lista de alunos abaixo (um nome por linha):</p>
-                                <textarea 
-                                    value={bulkInput} 
-                                    onChange={(e) => setBulkInput(e.target.value)}
-                                    placeholder="João Silva&#10;Maria Santos&#10;Pedro Oliveira&#10;Ana Costa"
-                                    className="w-full px-4 py-3 border-2 rounded-lg focus:border-purple-500 outline-none resize-none font-mono text-sm"
-                                    rows="8"
-                                />
+                                <textarea value={bulkInput} onChange={(e) => setBulkInput(e.target.value)}
+                                    placeholder="João Silva&#10;Maria Santos&#10;Pedro Oliveira"
+                                    className="w-full px-4 py-3 border-2 rounded-lg focus:border-purple-500 outline-none resize-none font-mono text-sm" rows="8" />
                                 <label className="flex items-center gap-2 cursor-pointer my-3">
-                                    <input 
-                                        type="checkbox" 
-                                        checked={posCenso}
-                                        onChange={(e) => setPosCenso(e.target.checked)}
-                                        className="w-5 h-5 rounded border-2 border-purple-500"
-                                    />
-                                    <span className="font-semibold text-purple-800">
-                                        📅 Matrícula Pós-Censo (alunos serão colocados no final da lista)
-                                    </span>
+                                    <input type="checkbox" checked={posCenso} onChange={(e) => setPosCenso(e.target.checked)} className="w-5 h-5 rounded border-2 border-purple-500" />
+                                    <span className="font-semibold text-purple-800">📅 Matrícula Pós-Censo (alunos serão colocados no final da lista)</span>
                                 </label>
-                                <button onClick={handleBulkAdd} className="w-full bg-purple-600 text-white py-3 rounded-lg font-bold hover:bg-purple-700 transition">
-                                    ✅ Adicionar Todos os Alunos
-                                </button>
+                                <button onClick={handleBulkAdd} className="w-full bg-purple-600 text-white py-3 rounded-lg font-bold hover:bg-purple-700 transition">✅ Adicionar Todos os Alunos</button>
                             </div>
                         )}
-                        
                         <div className="space-y-2">
                             <h3 className="font-bold mb-2">📋 Alunos da Turma ({cls.students.length}):</h3>
                             {cls.students.length === 0 ? (
@@ -2130,108 +1433,59 @@ function History({ classes, showToast }) {
                                     return sorted.map((s, index) => (
                                         <div key={s.id} className={`border-2 rounded-lg p-4 transition ${s.posCenso ? 'bg-yellow-50 border-yellow-300' : 'bg-white hover:bg-gray-50'}`}>
                                             <div className="flex items-center gap-3 mb-2">
-                                                <span className="font-bold text-sm bg-indigo-100 w-8 h-8 rounded-full flex items-center justify-center">
-                                                    {index + 1}
-                                                </span>
+                                                <span className="font-bold text-sm bg-indigo-100 w-8 h-8 rounded-full flex items-center justify-center">{index + 1}</span>
                                                 <div className="flex-1">
                                                     <span className="font-bold text-lg">{s.name}</span>
-                                                    {s.posCenso && (
-                                                        <span className="ml-2 text-xs bg-yellow-500 text-white px-2 py-1 rounded-full font-semibold">
-                                                            📅 PÓS-CENSO
-                                                        </span>
-                                                    )}
+                                                    {s.posCenso && <span className="ml-2 text-xs bg-yellow-500 text-white px-2 py-1 rounded-full font-semibold">📅 PÓS-CENSO</span>}
                                                 </div>
-                                                <select value={s.status} 
-                                                onChange={(e) => handleStatusChange(s.id, e.target.value)}
-                                                disabled={editingExit === s.id}
-                                                className="px-4 py-2 border-2 rounded-lg focus:border-indigo-500 outline-none bg-white">
-                                                <option value="ativo">✅ Ativo</option>
-                                                <option value="transferido">🔄 Transferido</option>
-                                                <option value="falecido">🕊️ Falecido</option>
-                                            </select>
-                                            <button onClick={() => handleDelete(s.id)} 
-                                                className="text-red-600 px-4 py-2 hover:bg-red-50 rounded-lg font-semibold transition">
-                                                🗑️ Excluir
-                                            </button>
+                                                <select value={s.status} onChange={(e) => handleStatusChange(s.id, e.target.value)} disabled={editingExit === s.id}
+                                                    className="px-4 py-2 border-2 rounded-lg focus:border-indigo-500 outline-none bg-white">
+                                                    <option value="ativo">✅ Ativo</option>
+                                                    <option value="transferido">🔄 Transferido</option>
+                                                    <option value="falecido">🕊️ Falecido</option>
+                                                </select>
+                                                <button onClick={() => handleDelete(s.id)} className="text-red-600 px-4 py-2 hover:bg-red-50 rounded-lg font-semibold transition">🗑️ Excluir</button>
+                                            </div>
+                                            {editingExit === s.id && (
+                                                <div className="mt-3 p-4 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg border-2 border-yellow-400 shadow-lg">
+                                                    <div className="flex items-center gap-3 mb-3">
+                                                        <span className="text-3xl">{s.status === 'transferido' ? '🔄' : '🕊️'}</span>
+                                                        <div>
+                                                            <h4 className="font-bold text-yellow-800">{s.status === 'transferido' ? 'Registrar Transferência' : 'Registrar Falecimento'}</h4>
+                                                            <p className="text-sm text-yellow-700">⚠️ Preencha os dados abaixo e clique em Confirmar</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="space-y-3">
+                                                        <div>
+                                                            <label className="block text-sm font-bold text-gray-700 mb-1">📅 Data:</label>
+                                                            <input type="date" value={exitDate} onChange={(e) => setExitDate(e.target.value)} className="w-full px-4 py-2 border-2 rounded-lg focus:border-yellow-500 outline-none" />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-sm font-bold text-gray-700 mb-1">📝 Observações (opcional):</label>
+                                                            <textarea value={exitObservation} onChange={(e) => setExitObservation(e.target.value)}
+                                                                placeholder="Ex: Transferido para Escola Municipal X..."
+                                                                className="w-full px-4 py-2 border-2 rounded-lg focus:border-yellow-500 outline-none resize-none" rows="3" />
+                                                        </div>
+                                                        <div className="flex gap-2">
+                                                            <button onClick={() => confirmStatusChange(s.id)} className="flex-1 bg-green-600 text-white py-2 rounded-lg font-bold hover:bg-green-700 transition">✅ Confirmar</button>
+                                                            <button onClick={() => { setEditingExit(null); setExitDate(new Date().toISOString().split('T')[0]); setExitObservation(''); }}
+                                                                className="flex-1 bg-gray-200 py-2 rounded-lg font-bold hover:bg-gray-300 transition">❌ Cancelar</button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {s.status !== 'ativo' && s.exitDate && editingExit !== s.id && (
+                                                <div className="mt-2 p-3 bg-gray-50 rounded border-l-4 border-gray-400">
+                                                    <p className="text-sm"><span className="font-semibold">Data de saída:</span> {new Date(s.exitDate + 'T00:00:00').toLocaleDateString('pt-BR')}</p>
+                                                    {s.exitObservation && <p className="text-sm mt-1"><span className="font-semibold">Obs:</span> {s.exitObservation}</p>}
+                                                </div>
+                                            )}
                                         </div>
-                                        
-                                        {/* Formulário de saída quando muda para transferido/falecido */}
-                                        {editingExit === s.id && (
-                                            <div className="mt-3 p-4 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg border-2 border-yellow-400 shadow-lg">
-                                                <div className="flex items-center gap-3 mb-3">
-                                                    <span className="text-3xl">{s.status === 'transferido' ? '🔄' : '🕊️'}</span>
-                                                    <div>
-                                                        <h4 className="font-bold text-yellow-800">
-                                                            {s.status === 'transferido' ? 'Registrar Transferência' : 'Registrar Falecimento'}
-                                                        </h4>
-                                                        <p className="text-sm text-yellow-700">⚠️ Preencha os dados abaixo e clique em Confirmar</p>
-                                                    </div>
-                                                </div>
-                                                
-                                                <div className="space-y-3">
-                                                    <div>
-                                                        <label className="block text-sm font-bold text-gray-700 mb-1">📅 Data:</label>
-                                                        <input 
-                                                            type="date" 
-                                                            value={exitDate}
-                                                            onChange={(e) => setExitDate(e.target.value)}
-                                                            className="w-full px-4 py-2 border-2 rounded-lg focus:border-yellow-500 outline-none"
-                                                        />
-                                                    </div>
-                                                    
-                                                    <div>
-                                                        <label className="block text-sm font-bold text-gray-700 mb-1">📝 Observações (opcional):</label>
-                                                        <textarea 
-                                                            value={exitObservation}
-                                                            onChange={(e) => setExitObservation(e.target.value)}
-                                                            placeholder="Ex: Transferido para Escola Municipal X..."
-                                                            className="w-full px-4 py-2 border-2 rounded-lg focus:border-yellow-500 outline-none resize-none"
-                                                            rows="3"
-                                                        />
-                                                    </div>
-                                                    
-                                                    <div className="flex gap-2">
-                                                        <button 
-                                                            onClick={() => confirmStatusChange(s.id)}
-                                                            className="flex-1 bg-green-600 text-white py-2 rounded-lg font-bold hover:bg-green-700 transition">
-                                                            ✅ Confirmar
-                                                        </button>
-                                                        <button 
-                                                            onClick={() => {
-                                                                setEditingExit(null);
-                                                                setExitDate(new Date().toISOString().split('T')[0]);
-                                                                setExitObservation('');
-                                                            }}
-                                                            className="flex-1 bg-gray-200 py-2 rounded-lg font-bold hover:bg-gray-300 transition">
-                                                            ❌ Cancelar
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        )}
-                                        
-                                        {/* Mostra info de saída se já registrada */}
-                                        {s.status !== 'ativo' && s.exitDate && editingExit !== s.id && (
-                                            <div className="mt-2 p-3 bg-gray-50 rounded border-l-4 border-gray-400">
-                                                <p className="text-sm">
-                                                    <span className="font-semibold">Data de saída:</span> {new Date(s.exitDate + 'T00:00:00').toLocaleDateString('pt-BR')}
-                                                </p>
-                                                {s.exitObservation && (
-                                                    <p className="text-sm mt-1">
-                                                        <span className="font-semibold">Obs:</span> {s.exitObservation}
-                                                    </p>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-                                ));
+                                    ));
                                 })()
                             )}
                         </div>
-                        
-                        <button onClick={onClose} className="w-full mt-4 bg-gray-200 py-3 rounded-lg font-bold hover:bg-gray-300 transition">
-                            ❌ Fechar
-                        </button>
+                        <button onClick={onClose} className="w-full mt-4 bg-gray-200 py-3 rounded-lg font-bold hover:bg-gray-300 transition">❌ Fechar</button>
                     </div>
                 </div>
             );
