@@ -667,7 +667,12 @@
                 return cls.students.filter(s => s.status === 'ativo').map(student => {
                     let presente = 0, falta = 0, justificada = 0;
                     const faltaDates = [], justificadaDates = [];
+                    // Só conta dias a partir da data de matrícula do aluno
+                    const enrollDate = student.enrollDate || null;
+                    const enrollLimit = enrollDate ? new Date(enrollDate + 'T00:00:00') : null;
                     days.forEach(day => {
+                        // Pula dias anteriores à matrícula
+                        if (enrollLimit && new Date(day + 'T00:00:00') < enrollLimit) return;
                         const att = student.attendance?.[day];
                         if (att === 'presente') presente++;
                         else if (att === 'falta') { falta++; faltaDates.push(day); }
@@ -675,7 +680,7 @@
                     });
                     const total = presente + falta + justificada;
                     const percentage = total > 0 ? ((presente / total) * 100).toFixed(1) : 0;
-                    return { student, presente, falta, justificada, total, percentage, days, faltaDates, justificadaDates };
+                    return { student, presente, falta, justificada, total, percentage, days, faltaDates, justificadaDates, enrollDate };
                 });
             };
             
@@ -698,7 +703,12 @@
 
                 // Resumo
                 doc.setFontSize(11); doc.setFont(undefined, 'normal');
-                doc.text(`Presenças: ${studentData.presente}`, 20, 60);
+                const enrollInfo = studentData.enrollDate ? `Data de Matrícula: ${fmtDate(studentData.enrollDate)}` : 'Data de Matrícula: Não informada';
+                doc.text(enrollInfo, 20, 57);
+                const calcFrom = studentData.enrollDate && new Date(studentData.enrollDate + 'T00:00:00') > new Date(startDate + 'T00:00:00')
+                    ? `(frequência calculada a partir de ${fmtDate(studentData.enrollDate)})` : '';
+                if (calcFrom) { doc.setTextColor(180, 90, 0); doc.text(calcFrom, 20, 63); doc.setTextColor(0,0,0); }
+                doc.text(`Presenças: ${studentData.presente}`, 20, calcFrom ? 72 : 65);
                 doc.text(`Faltas: ${studentData.falta}`, 20, 67);
                 doc.text(`Justificadas: ${studentData.justificada}`, 20, 74);
                 doc.text(`Total de Aulas Registradas: ${studentData.total}`, 20, 81);
@@ -773,6 +783,7 @@
                 const tableData = report.map((r, idx) => [
                     idx + 1,
                     r.student.name,
+                    r.enrollDate ? fmtDate(r.enrollDate) : '-',
                     r.presente,
                     r.falta,
                     r.faltaDates.length > 0 ? r.faltaDates.map(d => fmtDate(d)).join(', ') : '-',
@@ -784,32 +795,33 @@
 
                 doc.autoTable({
                     startY: 27,
-                    head: [['#', 'Aluno', 'Pres.', 'Faltas', 'Datas das Faltas', 'Just.', 'Datas Justificadas', 'Total', '%']],
+                    head: [['#', 'Aluno', 'Matrícula', 'Pres.', 'Faltas', 'Datas das Faltas', 'Just.', 'Datas Justificadas', 'Total', '%']],
                     body: tableData,
                     theme: 'grid',
                     headStyles: { fillColor: [91, 95, 199], fontSize: 8, fontStyle: 'bold' },
                     styles: { fontSize: 7.5, cellPadding: 2.5, overflow: 'linebreak' },
                     columnStyles: {
                         0: { cellWidth: 8, halign: 'center' },
-                        1: { cellWidth: 48 },
-                        2: { cellWidth: 12, halign: 'center' },
-                        3: { cellWidth: 12, halign: 'center' },
-                        4: { cellWidth: 55 },
-                        5: { cellWidth: 12, halign: 'center' },
-                        6: { cellWidth: 55 },
-                        7: { cellWidth: 12, halign: 'center' },
-                        8: { cellWidth: 16, halign: 'center' }
+                        1: { cellWidth: 42 },
+                        2: { cellWidth: 22, halign: 'center' },
+                        3: { cellWidth: 11, halign: 'center' },
+                        4: { cellWidth: 11, halign: 'center' },
+                        5: { cellWidth: 48 },
+                        6: { cellWidth: 11, halign: 'center' },
+                        7: { cellWidth: 48 },
+                        8: { cellWidth: 11, halign: 'center' },
+                        9: { cellWidth: 14, halign: 'center' }
                     },
                     didParseCell: (data) => {
-                        if (data.column.index === 3 && data.section === 'body') {
+                        if (data.column.index === 4 && data.section === 'body') {
                             const val = parseInt(data.cell.raw);
                             if (val > 0) data.cell.styles.textColor = [200, 0, 0];
                         }
-                        if (data.column.index === 5 && data.section === 'body') {
+                        if (data.column.index === 6 && data.section === 'body') {
                             const val = parseInt(data.cell.raw);
                             if (val > 0) data.cell.styles.textColor = [150, 100, 0];
                         }
-                        if (data.column.index === 8 && data.section === 'body') {
+                        if (data.column.index === 9 && data.section === 'body') {
                             const val = parseFloat(data.cell.raw);
                             data.cell.styles.textColor = val >= 75 ? [0, 140, 0] : [200, 0, 0];
                             data.cell.styles.fontStyle = 'bold';
@@ -1012,7 +1024,10 @@
                                             onClick={() => setExpandedStudent(expandedStudent === r.student.id ? null : r.student.id)}
                                         >
                                             <span className="font-bold text-sm bg-indigo-100 w-8 h-8 rounded-full flex items-center justify-center shrink-0">{idx + 1}</span>
-                                            <span className="flex-1 font-bold text-base">{r.student.name}</span>
+                                            <div className="flex-1">
+                                                <span className="font-bold text-base">{r.student.name}</span>
+                                                <p className="text-xs text-gray-500">📆 Matrícula: {r.enrollDate ? fmtDate(r.enrollDate) : 'Não informada'}{r.enrollDate && new Date(r.enrollDate + 'T00:00:00') > new Date(startDate + 'T00:00:00') ? <span className="ml-1 text-orange-600 font-semibold">(cálculo a partir de {fmtDate(r.enrollDate)})</span> : null}</p>
+                                            </div>
                                             <div className="flex items-center gap-4 text-sm">
                                                 <span className="text-green-600 font-bold">✅ {r.presente}</span>
                                                 <span className="text-red-600 font-bold">❌ {r.falta}</span>
@@ -1574,6 +1589,7 @@
             const [exitDate, setExitDate] = useState(new Date().toISOString().split('T')[0]);
             const [exitObservation, setExitObservation] = useState('');
             const [posCenso, setPosCenso] = useState(false);
+            const [enrollDate, setEnrollDate] = useState(new Date().toISOString().split('T')[0]);
             
             const sortStudents = (students) => {
                 const normais = students.filter(s => !s.posCenso).sort((a, b) => a.name.localeCompare(b.name));
@@ -1583,20 +1599,20 @@
             
             const handleAdd = () => {
                 if (!name.trim()) { showToast('Digite o nome do aluno!', 'error'); return; }
-                const newStudent = { id: Date.now(), name: name.trim(), status: 'ativo', posCenso, attendance: {}, observations: {}, exitDate: null, exitObservation: '' };
+                const newStudent = { id: Date.now(), name: name.trim(), status: 'ativo', posCenso, enrollDate, attendance: {}, observations: {}, exitDate: null, exitObservation: '' };
                 setClasses(classes.map(c => c.id === cls.id ? { ...c, students: sortStudents([...c.students, newStudent]) } : c));
                 showToast(`Aluno ${posCenso ? '(Pós-censo) ' : ''}adicionado com sucesso!`, 'success');
-                setName(''); setPosCenso(false);
+                setName(''); setPosCenso(false); setEnrollDate(new Date().toISOString().split('T')[0]);
             };
             
             const handleBulkAdd = () => {
                 if (!bulkInput.trim()) { showToast('Cole a lista de alunos!', 'error'); return; }
                 const lines = bulkInput.split('\n').map(l => l.trim()).filter(l => l.length > 0);
                 if (lines.length === 0) { showToast('Nenhum nome válido encontrado!', 'error'); return; }
-                const newStudents = lines.map((studentName, index) => ({ id: Date.now() + index, name: studentName, status: 'ativo', posCenso, attendance: {}, observations: {}, exitDate: null, exitObservation: '' }));
+                const newStudents = lines.map((studentName, index) => ({ id: Date.now() + index, name: studentName, status: 'ativo', posCenso, enrollDate, attendance: {}, observations: {}, exitDate: null, exitObservation: '' }));
                 setClasses(classes.map(c => c.id === cls.id ? { ...c, students: sortStudents([...c.students, ...newStudents]) } : c));
                 showToast(`${newStudents.length} aluno(s) adicionado(s) com sucesso!`, 'success');
-                setBulkInput(''); setShowBulkAdd(false); setPosCenso(false);
+                setBulkInput(''); setShowBulkAdd(false); setPosCenso(false); setEnrollDate(new Date().toISOString().split('T')[0]);
             };
             
             const handleStatusChange = (studentId, newStatus) => {
@@ -1646,10 +1662,17 @@
                                             onKeyPress={(e) => e.key === 'Enter' && handleAdd()} />
                                         <button onClick={handleAdd} className="bg-blue-600 text-white px-8 py-3 rounded-lg font-bold hover:bg-blue-700 transition">✅ Adicionar</button>
                                     </div>
-                                    <label className="flex items-center gap-2 cursor-pointer">
-                                        <input type="checkbox" checked={posCenso} onChange={(e) => setPosCenso(e.target.checked)} className="w-5 h-5 rounded border-2 border-blue-500" />
-                                        <span className="font-semibold text-blue-800">📅 Matrícula Pós-Censo (aluno será colocado no final da lista)</span>
-                                    </label>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input type="checkbox" checked={posCenso} onChange={(e) => setPosCenso(e.target.checked)} className="w-5 h-5 rounded border-2 border-blue-500" />
+                                            <span className="font-semibold text-blue-800">📅 Matrícula Pós-Censo</span>
+                                        </label>
+                                        <div>
+                                            <label className="block text-sm font-bold text-gray-700 mb-1">📆 Data de Matrícula:</label>
+                                            <input type="date" value={enrollDate} onChange={(e) => setEnrollDate(e.target.value)}
+                                                className="w-full px-3 py-2 border-2 rounded-lg focus:border-blue-500 outline-none" />
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         ) : (
@@ -1659,10 +1682,17 @@
                                 <textarea value={bulkInput} onChange={(e) => setBulkInput(e.target.value)}
                                     placeholder="João Silva&#10;Maria Santos&#10;Pedro Oliveira"
                                     className="w-full px-4 py-3 border-2 rounded-lg focus:border-purple-500 outline-none resize-none font-mono text-sm" rows="8" />
-                                <label className="flex items-center gap-2 cursor-pointer my-3">
-                                    <input type="checkbox" checked={posCenso} onChange={(e) => setPosCenso(e.target.checked)} className="w-5 h-5 rounded border-2 border-purple-500" />
-                                    <span className="font-semibold text-purple-800">📅 Matrícula Pós-Censo (alunos serão colocados no final da lista)</span>
-                                </label>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 my-3">
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input type="checkbox" checked={posCenso} onChange={(e) => setPosCenso(e.target.checked)} className="w-5 h-5 rounded border-2 border-purple-500" />
+                                        <span className="font-semibold text-purple-800">📅 Matrícula Pós-Censo</span>
+                                    </label>
+                                    <div>
+                                        <label className="block text-sm font-bold text-gray-700 mb-1">📆 Data de Matrícula (todos):</label>
+                                        <input type="date" value={enrollDate} onChange={(e) => setEnrollDate(e.target.value)}
+                                            className="w-full px-3 py-2 border-2 rounded-lg focus:border-purple-500 outline-none" />
+                                    </div>
+                                </div>
                                 <button onClick={handleBulkAdd} className="w-full bg-purple-600 text-white py-3 rounded-lg font-bold hover:bg-purple-700 transition">✅ Adicionar Todos os Alunos</button>
                             </div>
                         )}
@@ -1680,6 +1710,7 @@
                                                 <div className="flex-1">
                                                     <span className="font-bold text-lg">{s.name}</span>
                                                     {s.posCenso && <span className="ml-2 text-xs bg-yellow-500 text-white px-2 py-1 rounded-full font-semibold">📅 PÓS-CENSO</span>}
+                                                    <p className="text-xs text-gray-500 mt-0.5">📆 Matrícula: {s.enrollDate ? new Date(s.enrollDate + 'T00:00:00').toLocaleDateString('pt-BR') : 'Não informada'}</p>
                                                 </div>
                                                 <select value={s.status} onChange={(e) => handleStatusChange(s.id, e.target.value)} disabled={editingExit === s.id}
                                                     className="px-4 py-2 border-2 rounded-lg focus:border-indigo-500 outline-none bg-white">
